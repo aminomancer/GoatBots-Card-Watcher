@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.0.0
+// @version        1.0.1
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -8,14 +8,19 @@
 // @namespace      https://github.com/aminomancer
 // @grant          none
 // @run-at         document-start
-// @match          https://www.goatbots.com/set/promotional-double-masters-2022
+// @match          https://www.goatbots.com/set/promotional-double-masters-2022+
 // @description    Refresh a GoatBots page on a set timer, check if any of the
 // cards specified by name in the settings are in stock, and make an alert if
 // so. The alert will use text-to-speech to audibly speak the names of the new
 // cards if text-to-speech is available on your computer. Otherwise it will just
 // play a predefined sound file that says "New cards in stock."
 // Configure the script by setting the @match URL just above this to the URL for
-// the GoatBots page you want to scan. You can have multiple @match entries.
+// the GoatBots page you want to scan. You can have multiple @match entries. If
+// you want to still be able to use the normal page without it constantly
+// reloading, add a + at the end of the URL (see above). You can navigate to it
+// just fine, and your script manager will recognize it as a different URL.
+// Then, the script will only activate when you explicitly navigate to the
+// version of the URL with a + at the end.
 // Then, replace the card names in the config section below with the card names
 // you want to scan for. Names must match the names on GoatBots exactly.
 // By default, this will refresh the page every 10 seconds, provided the tab the
@@ -55,7 +60,6 @@ class CardWatcher {
       "Cavern of Souls",
       "Aether Vial",
       "Surgical Extraction #19",
-      "Kozilek, Butcher of Truth",
       "Emrakul, the Aeons Torn #67",
       "Liliana, the Last Hope",
       "Ulamog, the Infinite Gyre",
@@ -82,7 +86,6 @@ class CardWatcher {
       "Wall of Omens #2",
       "Anger of the Gods",
       "Pithing Needle #61",
-      "Panharmonicon",
       "Thousand-Year Storm",
       "Bloodbraid Elf #40",
       "Flickerwisp",
@@ -133,10 +136,14 @@ class CardWatcher {
       if (row.className === "header") continue;
       let name = row.querySelector(".name")?.innerText?.trim();
       if (this.config.Cards.includes(name)) {
+        // Only name the card if it's in stock.
         if (row.querySelector(".stock")?.classList.contains("out")) continue;
         // console.log("name :>> ", name);
         cards.push(name);
-        row.querySelector(".delivery")?.click();
+        let delivery = row.querySelector(".delivery");
+        // If the card isn't already in our cart, add it.
+        if (delivery.firstElementChild?.classList.contains("delivery-count")) continue;
+        delivery?.click();
       }
     }
     window.removeEventListener("load", this);
@@ -153,6 +160,8 @@ class CardWatcher {
     speech.text = words;
     if (this.voices) {
       if (!window.speechSynthesis.speaking) {
+        // Navigate to the delivery page when the alert is finished. I'd prefer
+        // to do this sooner but navigation ends the speech synthesis.
         speech.onend = () => {
           location.href = "/delivery";
           speech.onend = null;
@@ -163,6 +172,7 @@ class CardWatcher {
   }
   playAudio() {
     // console.log("playing audio");
+    // Navigate to the delivery page when the alert is finished.
     this.audio.onended = () => {
       location.href = "/delivery";
       this.audio.onended = null;

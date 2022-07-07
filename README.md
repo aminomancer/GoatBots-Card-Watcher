@@ -1,7 +1,9 @@
 # GoatBots-Card-Watcher
-Refresh a GoatBots page on a set timer, check if any of the cards specified by name in the settings are in stock, and alert the user if so.
+Refresh a [GoatBots](https://www.goatbots.com/) page on a set timer, check if any of the cards specified by name in the settings are in stock, and alert the user if so.
 
 The alert will use text-to-speech to audibly speak the names of the new cards if text-to-speech is available on your computer. Otherwise it will just play a predefined sound file that says "New cards in stock." Configure the script by setting the `@match` URL in the script's metadata block to the URL for the GoatBots page you want to scan. You can have multiple `@match` entries.
+
+If you want to still be able to use the normal page without it constantly reloading, add a `+` at the end of the URL: `https://www.goatbots.com/set/kaldheim+` for example. You can navigate to this kind of URL just fine, and your script manager will recognize it as a different URL. That way, the script will only activate when you explicitly navigate to the version of the URL with a + at the end. Just bookmark the version with a + at the end, and otherwise you can use GoatBots normally.
 
 Then, replace the card names in the script's config section with the card names you want to scan for. Names must match the names on GoatBots precisely. By default, this will refresh the page every 10 seconds, provided the tab the page is loaded in is not active. It basically pauses refreshing while the tab is active, so that you can still use the page as normal. That way, it will only scan in the background, and alert you when it finds something. However, this pausing behavior can be disabled by setting `Refresh while active` to false in the config settings.
 
