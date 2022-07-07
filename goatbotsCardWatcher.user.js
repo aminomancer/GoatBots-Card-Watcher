@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.0.2
+// @version        1.0.3
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -28,7 +28,7 @@
 // is active, so that you can still use the page as normal. That way, it will
 // only scan in the background, and alert you when it finds something. However,
 // this pausing behavior can be disabled by setting "Refresh while active" to
-// false in the config settings below. There are a few other settings below.
+// true in the config settings below. There are a few other settings as well.
 // If you're using Firefox and you want the text-to-speech alerts, make sure the
 // following pref is enabled in about:config -
 // media.webspeech.synth.enabled
@@ -108,7 +108,7 @@ class CardWatcher {
     // By default, the page will only refresh when the tab is in the background
     // (i.e., you have a different tab focused). This way you can still use the
     // page normally if you want to. But if you use windows instead of tabs, so
-    // that your GoatBots tab is always visible, you should set this to false.
+    // that your GoatBots tab is always visible, you should set this to true.
     "Refresh while active": false,
 
     // The audio file to use if text-to-speech is disabled or unavailable. This
