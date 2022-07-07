@@ -1,2 +1,8 @@
 # GoatBots-Card-Watcher
 Refresh a GoatBots page on a set timer, check if any of the cards specified by name in the settings are in stock, and alert the user if so.
+
+The alert will use text-to-speech to audibly speak the names of the new cards if text-to-speech is available on your computer. Otherwise it will just play a predefined sound file that says "New cards in stock." Configure the script by setting the `@match` URL in the script's metadata block to the URL for the GoatBots page you want to scan. You can have multiple `@match` entries.
+
+Then, replace the card names in the script's config section with the card names you want to scan for. Names must match the names on GoatBots precisely. By default, this will refresh the page every 10 seconds, provided the tab the page is loaded in is not active. It basically pauses refreshing while the tab is active, so that you can still use the page as normal. That way, it will only scan in the background, and alert you when it finds something. However, this pausing behavior can be disabled by setting `Refresh while active` to false in the config settings.
+
+If you're using Firefox and you want the text-to-speech alerts, make sure the pref `media.webspeech.synth.enabled` is enabled in about:config. If you don't want or can't use text-to-speech, and the default sound file is not to your liking, you can replace it with your own base64-encoded audio file. You can convert any mp3 file to base64 by uploading it to [this encoder](https://codepen.io/xewl/pen/NjyRJx). Then just copy the resulting string and replace the `Base64 audio file` value in the config settings with your new string. The script will decode and play it at runtime.
