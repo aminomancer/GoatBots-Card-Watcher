@@ -3,6 +3,8 @@
 
 Automatically refresh a [GoatBots](https://www.goatbots.com/) page on a set timer, check if any of the cards specified by name in the settings are in stock, and if so, add them to the cart, go to the delivery page, and alert the user. This is mainly useful if you're trying to buy new cards that are extremely rare and in high demand. Other players may beat you to the punch if you just manually check every few minutes. That's what motivated me to write this script. I was trying to buy the full-art promos from Double Masters 2022 and other people kept beating me to the draw. So, I made a script to watch the stock for me and give me a head start when a rare card comes into stock.
 
+## Configuration
+
 Configure the script by adding a pathname for a GoatBots page you want to scan, such as `https://www.goatbots.com/set/kaldheim`. When you navigate to that page, the script will automatically reload it on a timer to check if any cards on your list is in stock. When a card on your list is detected, an audio alert will play. You can scan as many pages as you want, and you can scan for as many cards per-page as you want. Each page has its own cards list in the config settings, so they won't get mixed up.
 
 The alert will play synthesized speech of the names of the new cards, as long as at least one text-to-speech voice is available in your computer operating system. Otherwise it will just play a predefined sound file that says "New cards in stock." The sounds in this script are encoded directly in the script, so it doesn't download anything.
