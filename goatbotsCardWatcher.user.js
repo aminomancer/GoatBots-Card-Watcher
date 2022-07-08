@@ -112,7 +112,6 @@ class CardWatcher {
           "Damnation #18",
           "Monastery Swiftspear",
           "Mulldrifter #11",
-          "Eternal Witness #30",
           "Spell Pierce",
           "Burning-Tree Emissary",
           "Thought Scour",
