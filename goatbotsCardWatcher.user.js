@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.0.6
+// @version        1.0.7
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -9,7 +9,7 @@
 // @grant          none
 // @run-at         document-start
 // @match          https://www.goatbots.com/*
-// @description    Refresh a GoatBots page on a set timer, check if any of the cards specified by name in the settings are in stock, and make an alert if so.
+// @description    Automatically refresh a GoatBots page on a set timer, check if any of the cards specified by name in the settings are in stock, and if so, add them to cart, play an audio alert, and (optionally) start delivery.
 
 // The alert will use text-to-speech to audibly speak the names of the new cards
 // if text-to-speech is available on your computer. Otherwise it will just play
@@ -31,7 +31,20 @@
 // is active, so that you can still use the page as normal. That way, it will
 // only scan in the background, and alert you when it finds something. However,
 // this pausing behavior can be disabled by setting "Refresh while active" to
-// true in the config settings below. There are a few other settings as well.
+// true in the config settings below.
+
+// The "Automatically start delivery" setting lets you begin delivery as soon as
+// new cards are detected. This increases the chances that you'll get the cards,
+// since there's no risk of fumbling around trying to find the tab and click the
+// "start delivery" button yourself. The script will just handle it for you. But
+// if you're going to use this, you have to make sure the script isn't operating
+// when you're away from the computer, since it will be a major public nuisance
+// if you're not actually present to conduct the delivery. Otherwise, it's
+// useful to have this feature since it takes a few minutes for GoatBots to
+// actually send a trade request. So there's time for you to get ready. You just
+// want to make sure you enter the delivery queue as soon as possible, so that
+// someone else doesn't queue up first. If you're first in line, I think it's
+// guaranteed you'll get the card.
 
 // If you're using Firefox and you want the text-to-speech alerts, make sure the
 // following pref is enabled in about:config - media.webspeech.synth.enabled
@@ -49,7 +62,7 @@
 class CardWatcher {
   config = {
     // This is where you list the pages you want to watch and the cards you want
-    // to scan for on those pages. This Watch array can have any number of
+    // to scan for on those pages. This Watchlist array can have any number of
     // members. Each member should be an object representing a GoatBots page to
     // scan for cards on. Therefore, each member should have a path property and
     // a cards property. The path property's value should be a valid GoatBots
@@ -86,12 +99,22 @@ class CardWatcher {
     // right-click the returned array in the console and hit "Copy Object" to
     // add it to your clipboard. Then just delete the names you don't care
     // about and enter it in as the cards value for one of the pages below.
-    "Watch": [
+    "Watchlist": [
+      // This is just an example. We're watching the page for Baldur's Gate, and
+      // we're scanning *that particular page* with *that exact path* for
+      // Ancient Copper Dragon and Ancient Gold Dragon. If you navigate to the
+      // Baldur's Gate page as normal, this won't activate, because there isn't
+      // any + at the end of the URL. If you add a + to the end of the URL, then
+      // it will start watching the page. Moreover, if the script found the same
+      // cards on a different page, it would do nothing. It's only searching for
+      // these cards on this specific page with this exact path. So you can
+      // think of each of these objects as a path-cards pair.
       {
         path: "/set/commander-legends-battle-for-baldurs-gate+", // pathname
         cards: ["Ancient Copper Dragon", "Ancient Gold Dragon"], // cards list
       },
 
+      // This is the list I actually use, and the reason I wrote this script.
       {
         path: "/set/promotional-double-masters-2022+",
         cards: [
@@ -135,23 +158,62 @@ class CardWatcher {
       },
     ],
 
-    // By default, the alert will convert the names of the new cards to audible
-    // speech. You can disable text-to-speech by setting this to false. In that
-    // case, it will use the fallback voice audio file below.
-    "Use text-to-speech": true,
+    // When we detect new cards on the list, we automatically navigate to the
+    // delivery page. But we can also automatically *start* delivery, making
+    // this even faster. Otherwise you might miss an opportunity, if for example
+    // you're working on something else when the alert goes off. This will allow
+    // you to get the delivery started while you get ready. It takes a few
+    // minutes for the delivery to be fulfilled, so there's plenty of time. The
+    // thing you need to be quick about is actually clicking the "start
+    // delivery" button. If you don't get to that fast enough, someone else will
+    // do it first. And it seems to be a first-come, first-served system.
+    // Whoever clicks that button first gets first priority, and anyone who
+    // clicks it after will not get the card unless the first person fails to
+    // complete the trade for whatever reason. So clicking the button as soon as
+    // possible is good, as long as we can get to the MTGO window in time. If
+    // you're going to use this feature, please don't use it irresponsibly. For
+    // example, if you use this script while you're away from the computer, then
+    // automatically starting deliveries that you're not present to complete
+    // will be of no use to you, and it will just make it harder for everyone
+    // else who's trying to buy the same cards and actually IS present.
+    // Consequently, this setting is disabled by default. I don't want people to
+    // be using it by accident, or using it without reading this, frankly.
+    "Automatically start delivery": false,
 
     // How often to refresh the page to check stock, in milliseconds. This is
     // set to 10 seconds by default. This should be set to at least the average
     // page load time. If it normally takes 2 seconds for the page to finish
     // loading (as indicated by a loading icon in your browser, etc.), then you
     // don't want to set this to less than 2 seconds.
-    "Timer interval": 10000,
+    "Refresh interval": 10000,
 
     // By default, the page will only refresh when the tab is in the background
     // (i.e., you have a different tab focused). This way you can still use the
     // page normally if you want to. But if you use windows instead of tabs, so
     // that your GoatBots tab is always visible, you should set this to true.
     "Refresh while active": false,
+
+    // By default, the alert will convert the names of the new cards to audible
+    // speech. You can disable text-to-speech by setting this to false. In that
+    // case, it will use the fallback voice audio file below.
+    "Use text-to-speech": true,
+
+    // If you set this to false, card numbers and tags will be omitted from the
+    // text-to-speech alert. So for example, instead of saying "Plains #268" it
+    // would just say "Plains" with no number. As for tags, instead of saying
+    // "Ultimate Masters #Full Art" it would just say "Plains" with no tag. If
+    // set to true it will just speak the card names exactly as they are.
+    "Speak card numbers and tags": true,
+
+    // How fast should the text-to-speech voice be? The value can range between
+    // 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the
+    // current platform or voice, which should correspond to a normal speaking
+    // rate. Other values act as a percentage relative to this, so for example 2
+    // is twice as fast, 0.5 is half as fast, etc. I prefer 1.1 since the
+    // default voice on my computer (Windows 10) is kinda slow. Also, the script
+    // doesn't navigate to the delivery page until the voice alert has finished.
+    // So, a slower voice rate might mean a longer delay in starting delivery.
+    "Text-to-speech rate": 1.1,
 
     // The audio file to use if text-to-speech is disabled or unavailable. This
     // must be an mp3 file converted to a base64 file using this tool:
@@ -164,12 +226,15 @@ class CardWatcher {
     // voice alert just to make it louder and fancier.
     "Alert audio file": `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AAAICIAI+AAAAQAAAf4AAAAgB4AjwAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/0kxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//sQROOPMAAAf4AAAAgHQBjlAAAAAAAB/gAAACAQACQUAAAGqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv/RTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAAAD/AAAAEAAAH+AAAAIAeAJEAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETgh3AFAMcAAAAIAAAP8AAAAQBEASCgAAAgDIAkFAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQROAP8AAAf4AAAAgCoAjQAAABAAAB/gAAACAHgCPAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE34/wAAB/gAAACAHgCOAAAAEAAAH+AAAAIAeAI4AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETej/AAAH+AAAAIAeAI8AAAAQAAAf4AAAAgAAA/wAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQRN6P8AAAf4AAAAgB4AjwAAABAAAB/gAAACAAAD/AAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAHgCPAAAAEAAAH+AAAAIAAAP8AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGTdj/AAAH+AAAAIAAAP8AAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV`,
   };
+
   constructor() {
-    let page = this.config.Watch.find(page => page.path === location.pathname);
+    // If the current page is not in the watchlist, do nothing.
+    let page = this.config.Watchlist.find(page => page.path === location.pathname);
     if (!page) return;
-    // console.log("constructed");
+    // console.log("GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
+    // If the page's cards list is empty for some reason, do nothing.
     if (!this.cards.length) return;
     window.addEventListener("load", this);
     if (this.config["Use text-to-speech"] && window.speechSynthesis) {
@@ -178,20 +243,24 @@ class CardWatcher {
         this.voices = window.speechSynthesis.getVoices();
       };
     }
+    // Construct the predefined audio files.
     this.voiceAudio = new window.Audio("data:audio/mp3;base64," + this.config["Voice audio file"]);
     this.alertAudio = new window.Audio("data:audio/mp3;base64," + this.config["Alert audio file"]);
   }
+
+  // Invoked when the page finishes loading. Scan for new cards.
   handleEvent() {
-    // console.log("loaded");
+    // console.log("GoatBots Card Watcher: loaded");
     let cards = [];
     let rows = [];
+    // Scan every card in the page's price list.
     for (let row of document.querySelector("#main .price-list")?.children) {
       if (row.className === "header") continue;
       let name = row.querySelector(".name")?.innerText?.trim();
       if (this.cards.includes(name)) {
-        // Only name the card if it's in stock.
+        // Only handle the card if it's in stock.
         if (row.querySelector(".stock")?.classList.contains("out")) continue;
-        // console.log("name :>> ", name);
+        // console.log(`GoatBots Card Watcher: ${name} in stock`);
         cards.push(name);
         // If the card isn't already in our cart, add it.
         if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
@@ -200,60 +269,127 @@ class CardWatcher {
       }
     }
     window.removeEventListener("load", this);
+    // If we found cards, start the alert process.
     if (cards.length > 0) {
       this.addToCart(rows);
       if (this.config["Use text-to-speech"] && window.speechSynthesis) {
-        this.speechSynth(cards.map(item => item.replace(/#[0-9]*$/, "").trim()).join("; "));
-      } else this.playVoice();
-    } else this.countdown();
+        if (!this.config["Speak card numbers and tags"]) {
+          // Elide everything after the hash # character to remove number/tag
+          cards = cards.map(item => item.split("#")[0].trim());
+        }
+        this.playSynthAlert(cards.join("; "));
+      } else this.playVoiceAlert();
+    } else {
+      // Otherwise, start the reload timer.
+      this.countdown();
+    }
   }
-  addToCart(rows, i = 0) {
+
+  /**
+   * Add the passed items to the cart. When all of them are finished, try to
+   * start delivery automatically. This relies on ajax requests and we can't add
+   * multiple items in one request, so we need to iterate over the items, only
+   * adding the next item when the current item finishes successfully.
+   * @param {array} rows an array containing all the items to add.
+   * @param {number} i the current array index.
+   */
+  addToCart(rows = [], i = 0) {
     let row = rows[i];
-    if (row) {
+    // If the current row is valid, add it to cart.
+    if (row !== undefined) {
+      // console.log(`GoatBots Card Watcher: adding ${row.querySelector(".name")?.innerText?.trim()} to cart`);
       Ajax({
         url: "/ajax/delivery-item",
         data: { item: row.dataset.item },
         abort: "item" + row.dataset.item,
         success: () => this.addToCart(rows, ++i),
       });
+    } else if (rows.length) {
+      // If the row is undefined, that means either 1) the array was somehow
+      // empty from the start, in which case we should do nothing; or 2) we got
+      // to the end of the array, meaning we're finished adding items to cart.
+      this.finishedAddingToCart = true;
+      this.tryDelivery();
     }
   }
-  speechSynth(words) {
-    // console.log("words :>> ", words);
+
+  // Convert the card names into audible speech.
+  playSynthAlert(words) {
+    // console.log("GoatBots Card Watcher: speech synth startup");
     let speech = new window.SpeechSynthesisUtterance();
     this.voices = window.speechSynthesis.getVoices();
     speech.text = words;
+    speech.rate = this.config["Text-to-speech rate"];
+    // If speech synthesis isn't working, use the generic voice file.
     if (this.voices) {
       if (!window.speechSynthesis.speaking) {
-        // Navigate to the delivery page when the alert is finished. I'd prefer
-        // to do this sooner but navigation ends the speech synthesis.
+        // Trigger delivery when the alert is finished. I'd prefer to do this
+        // sooner but navigation ends the speech synthesis.
         speech.onend = () => {
-          location.href = "/delivery";
+          this.finishedSpeaking = true;
+          this.tryDelivery();
           speech.onend = null;
         };
+        // console.log("GoatBots Card Watcher: speaking words :>> ", words);
         this.alertAudio.play();
         window.speechSynthesis.speak(speech);
       }
-    } else this.playVoice();
+    } else this.playVoiceAlert();
   }
-  playVoice() {
-    // console.log("playing audio");
-    // Navigate to the delivery page when the alert is finished.
+
+  // Play a predefined audio alert.
+  playVoiceAlert() {
+    // Trigger delivery when the alert is finished.
     this.voiceAudio.onended = () => {
-      location.href = "/delivery";
+      this.finishedSpeaking = true;
+      this.tryDelivery();
       this.voiceAudio.onended = null;
     };
+    // console.log("GoatBots Card Watcher: playing audio");
     this.alertAudio.play();
     this.voiceAudio.play();
   }
+
+  // Start the reload timer.
   countdown() {
+    // console.log("GoatBots Card Watcher: waiting to reload");
     window.clearTimeout(this.timer);
     this.timer = window.setTimeout(() => {
       if (this.path === location.pathname) {
+        // Don't reload if the tab is active unless the setting is enabled.
         if (document.hidden || this.config["Refresh while active"]) location.reload();
         else this.countdown();
       }
-    }, this.config["Timer interval"]);
+    }, this.config["Refresh interval"]);
+  }
+
+  // Either start delivery or go to the delivery page.
+  tryDelivery() {
+    // Only proceed if the speech/audio is finished (async) and we're finished
+    // adding items to cart (iterative). This will be called multiple times and
+    // only the last call will actually start delivery.
+    if (this.finishedSpeaking && this.finishedAddingToCart) {
+      if (this.config["Automatically start delivery"]) {
+        // If the setting is enabled, start delivery automatically.
+        Ajax({
+          url: "/ajax/delivery-start",
+          leaving: true,
+          success: () => {
+            location.href = "/delivery";
+          },
+        });
+        // console.log("GoatBots Card Watcher: starting delivery");
+      } else {
+        // Just go to the delivery page without starting delivery.
+        location.href = "/delivery";
+      }
+    } else {
+      // console.log(
+      //   "GoatBots Card Watcher: waiting for " + this.finishedSpeaking
+      //     ? "items to be added to cart"
+      //     : "speech/audio to finish"
+      // );
+    }
   }
 }
 
