@@ -184,6 +184,7 @@ class CardWatcher {
   handleEvent() {
     // console.log("loaded");
     let cards = [];
+    let rows = [];
     for (let row of document.querySelector("#main .price-list")?.children) {
       if (row.className === "header") continue;
       let name = row.querySelector(".name")?.innerText?.trim();
@@ -192,18 +193,30 @@ class CardWatcher {
         if (row.querySelector(".stock")?.classList.contains("out")) continue;
         // console.log("name :>> ", name);
         cards.push(name);
-        let delivery = row.querySelector(".delivery");
         // If the card isn't already in our cart, add it.
-        if (delivery.firstElementChild?.classList.contains("delivery-count")) continue;
-        delivery?.click();
+        if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
+          continue;
+        rows.push(row);
       }
     }
     window.removeEventListener("load", this);
     if (cards.length > 0) {
+      this.addToCart(rows);
       if (this.config["Use text-to-speech"] && window.speechSynthesis) {
         this.speechSynth(cards.map(item => item.replace(/#[0-9]*$/, "").trim()).join("; "));
       } else this.playVoice();
     } else this.countdown();
+  }
+  addToCart(rows, i = 0) {
+    let row = rows[i];
+    if (row) {
+      Ajax({
+        url: "/ajax/delivery-item",
+        data: { item: row.dataset.item },
+        abort: "item" + row.dataset.item,
+        success: () => this.addToCart(rows, ++i),
+      });
+    }
   }
   speechSynth(words) {
     // console.log("words :>> ", words);
