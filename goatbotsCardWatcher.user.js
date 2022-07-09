@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.0.8
+// @version        1.0.9
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -278,7 +278,7 @@ class CardWatcher {
     var link = document.createElement("link");
     link.rel = "stylesheet";
     link.type = "text/css";
-    link.href = `data:text/css;utf8,.price-list>li[watching]>a{background:hsl(120,100%,80%,.22);}.price-list>li:nth-of-type(2n)[watching]>a,.price-list>li.even[watching]>a{background:hsl(120,100%,75%,.15);}`;
+    link.href = /* css */ `data:text/css;utf8,.price-list>li[watching]>a{background:hsla(120,100%,75%,.15);}.price-list>li[watching]:nth-of-type(2n)>a,.price-list>li.even[watching]>a{background:hsla(120,100%,80%,.22);}`;
     document.head.appendChild(link);
     // Scan every card in the page's price list.
     for (let row of document.querySelector("#main .price-list")?.children) {
