@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.1.2
+// @version        1.1.3
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -179,7 +179,18 @@ class CardWatcher {
             // If #delivery-steps is present, then the delivery is in progress.
             // Which means we don't want to go back yet. The page will reload
             // when delivery finishes, so we'll reach this code again.
-            if (!document.getElementById("delivery-steps")) location = previousURL;
+            // #delivery-count represents the number of items in cart. This is
+            // supposed to take us back to the previous page when a delivery has
+            // successfully finished. But sometimes a delivery might fail, in
+            // which case we want to let the user handle it. If a delivery was
+            // successful, our cart will be empty when the page reloads. So just
+            // check that the cart is empty before proceeding.
+            if (
+              !document.getElementById("delivery-steps") &&
+              !document.getElementById("delivery-count")?.textContent
+            ) {
+              location = previousURL;
+            }
           });
         }
       }
