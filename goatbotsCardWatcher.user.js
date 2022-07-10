@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.1.0
+// @version        1.1.1
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -15,22 +15,24 @@
 // multiple pages, and you can scan for multiple cards per-page.
 
 // Configure the script by setting a URL path and cards to scan for in the
-// config settings. You can access the config settings through your script
+// config settings. You can access the config settings through the "Card
+// Watcher" menu at the top of the GoatBots window, or through your script
 // manager. Violentmonkey and the latest Greasemonkey versions have a toolbar
-// button that opens a popup showing script settings for the current page. So if
-// you go to www.goatbots.com you can open the popup and use the buttons in
+// button that opens a popup showing script settings for the current page. These
+// are the same settings as in the "Card Watcher" menu. So if you go to
+// www.goatbots.com you can open the popup or the menu and use the buttons in
 // there to configure your watchlist. If you're not sure, there are further
 // instructions and details in the script.
 
-// When you first open a GoatBots page, open the script manager popup and click
-// "Add page to watchlist..." to make a watchlist editor appear. The top text
-// field is the path field. It defaults to the path of the current page. If you
-// want to still be able to use the normal GoatBots page without it constantly
-// reloading, add a + at the end of the page URL, like in the page paths for the
-// example watchlist. You can navigate to the URL just fine with a + at the end,
-// and the script will correctly recognize it as a different URL. Then, the
-// script will only activate when you explicitly navigate to the + version of
-// the URL, which you can bookmark.
+// When you first open a GoatBots page, open the menu popup and click the button
+// that says "Add page to watchlist" to make a watchlist editor appear. The top
+// text field is the path field. It defaults to the path of the current page. If
+// you want to still be able to use the normal GoatBots page without it
+// constantly reloading, add a + at the end of the page URL, like in the page
+// paths for the example watchlist. You can navigate to the URL just fine with a
+// + at the end, and the script will correctly recognize it as a different URL.
+// Then, the script will only activate when you explicitly navigate to the +
+// version of the URL, which you can bookmark.
 
 // Then proceed to the big text area — the cards list. You can manually enter in
 // the card names you want to add, as they appear on the page, separated by line
@@ -65,8 +67,8 @@
 // ready. You just want to make sure you enter the delivery queue as soon as
 // possible, so that someone else doesn't queue up first. If you're first in
 // line, I think it's guaranteed you'll get the card. You can toggle this
-// setting from the script manager's popup or the script values page. For
-// additional efficiency, when the delivery is finished, the script will
+// setting from the menu popup or your script manager (popup or values page).
+// For additional efficiency, when the delivery is finished, the script will
 // automatically go back to the page it was watching before it started delivery.
 
 // If you're using Firefox and you want the text-to-speech alerts, make sure the
@@ -81,6 +83,8 @@
 // script down, so you have to edit the script directly.
 
 // @grant          GM_registerMenuCommand
+// @grant          GM_unregisterMenuCommand
+// @grant          GM_addValueChangeListener
 // @grant          GM_setValue
 // @grant          GM_getValue
 // @grant          GM_addStyle
@@ -100,7 +104,8 @@ if (GM4) {
   GM_getValue = GM.getValue;
   GM_setValue = GM.setValue;
   GM_addStyle = GM.addStyle;
-  GM_registerMenuCommand = GM.registerMenuCommand;
+  GM_registerMenuCommand = () => {};
+  GM_unregisterMenuCommand = () => {};
 }
 
 class CardWatcher {
@@ -115,20 +120,31 @@ class CardWatcher {
         GM_setValue(key, value);
         this.config[key] = value;
       } else this.config[key] = saved;
+      GM_addValueChangeListener(key, (id, oldValue, newValue, remote) =>
+        this.onValueChange(id, oldValue, newValue, remote)
+      );
     }
-    if (this.config["Automatically start delivery"]) {
-      GM_registerMenuCommand("Disable automatic delivery", () => {
-        GM_setValue("Automatically start delivery", false);
-        location.reload();
-      });
-    } else {
-      GM_registerMenuCommand("Enable automatic delivery", () => {
-        GM_setValue("Automatically start delivery", true);
-        location.reload();
-      });
-    }
+    // Add menu commands for auto-start delivery and pause watching.
+    GM_registerMenuCommand(
+      this.config["Automatically start delivery"]
+        ? "Disable automatic delivery"
+        : "Enable automatic delivery",
+      () =>
+        GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
+    );
+    GM_registerMenuCommand(
+      this.config["Pause watching"] ? "Resume watching" : "Pause watching",
+      () => {
+        GM_setValue("Pause watching", !this.config["Pause watching"]);
+        if (this.config["Pause watching"] && this.cards?.length) location.reload();
+      }
+    );
     // Add styles to highlight watched cards.
     GM_addStyle(this.css);
+    // Check if the current page is not in the watchlist.
+    let page = this.config.Watchlist.find(page => page.path === location.pathname);
+    // Add a custom menu to the page DOM.
+    document.addEventListener("DOMContentLoaded", () => this.createMenu(page), { once: true });
     // If we're on the delivery page...
     if (location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
@@ -155,17 +171,13 @@ class CardWatcher {
       }
       return;
     }
-    // If the current page is not in the watchlist, do nothing but let the user
-    // add it to the watchlist.
-    let page = this.config.Watchlist.find(page => page.path === location.pathname);
     // Add menu commands for editing watchlist.
     document.addEventListener(
       "DOMContentLoaded",
       () => {
         if (document.querySelector("#main .price-list")) {
-          GM_registerMenuCommand(
-            page ? "Edit page's card list..." : "Add page to watchlist...",
-            () => this.editCardList()
+          GM_registerMenuCommand(page ? "Edit page's card list" : "Add page to watchlist", () =>
+            this.editCardList()
           );
         }
       },
@@ -197,6 +209,124 @@ class CardWatcher {
     this.alertAudio = new window.Audio("data:audio/mp3;base64," + this.audio["Alert audio file"]);
   }
 
+  onValueChange(id, oldValue, newValue, remote) {
+    if (oldValue === newValue) return;
+    // console.log("GoatBots Card Watcher: setting updated — " + id + " :>> " + newValue);
+    this.config[id] = newValue;
+    let menu = document.getElementById("card-watcher-menu");
+    switch (id) {
+      case "Pause watching":
+        if (menu) {
+          let label = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
+          let item = menu.querySelector("a[href='#pause']");
+          item.setAttribute("aria-label", label);
+          item.textContent = label;
+        }
+        if (!remote && !newValue && oldValue && this.cards?.length) location.reload();
+        GM_unregisterMenuCommand(oldValue ? "Resume watching" : "Pause watching");
+        GM_registerMenuCommand(newValue ? "Resume watching" : "Pause watching", () => {
+          GM_setValue("Pause watching", !newValue);
+        });
+        break;
+      case "Automatically start delivery":
+        if (menu) {
+          let label = this.config["Automatically start delivery"]
+            ? "Disable automatic delivery"
+            : "Enable automatic delivery";
+          let item = menu.querySelector("a[href='#autostart']");
+          item.setAttribute("aria-label", label);
+          item.textContent = label;
+        }
+        GM_unregisterMenuCommand(
+          oldValue ? "Disable automatic delivery" : "Enable automatic delivery"
+        );
+        GM_registerMenuCommand(
+          newValue ? "Disable automatic delivery" : "Enable automatic delivery",
+          () => GM_setValue("Automatically start delivery", !newValue)
+        );
+        break;
+    }
+  }
+
+  createMenu(page) {
+    // Make a menu in the navbar with the same options as in the script manager.
+    let nav = document.querySelector("nav");
+    if (!nav || nav.querySelector("ul > li#card-watcher-menu")) return;
+    // console.log("GoatBots Card Watcher: creating the DOM menu");
+    let ul = nav.querySelector("ul");
+    let menu = ul.children[3].cloneNode(true);
+    menu.id = "card-watcher-menu";
+    let label = menu.firstElementChild;
+    label.dataset.submenu = "cardwatcher";
+    label.classList.remove("active");
+    label.setAttribute("href", "#cardwatcher");
+    label.setAttribute("aria-label", "Card Watcher menu");
+    label.firstChild.textContent = `\nCard Watcher\n`;
+    let submenu = menu.lastElementChild;
+    submenu.id = "submenu-cardwatcher";
+
+    document.body.addEventListener("keydown", e => {
+      if (e.code === "Enter") {
+        let item = document.getElementById("card-watcher-menu").querySelector("li.selected");
+        if (item) {
+          // console.log("GoatBots Card Watcher: overriding Enter key behavior for our menu items");
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          item.firstElementChild.click();
+        }
+      }
+    });
+
+    let items = [];
+    for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
+    if (document.querySelector("#main .price-list")) {
+      let label0 = page ? "Edit page's card list" : "Add page to watchlist";
+      items[0].setAttribute("aria-label", label0);
+      items[0].textContent = label0;
+      items[0].setAttribute("href", "#cardlist");
+      items[0].setAttribute("onclick", "return false");
+      items[0].addEventListener("click", () => this.editCardList());
+
+      if (page) {
+        let label1 = "Remove page from watchlist";
+        items[1].setAttribute("aria-label", label1);
+        items[1].textContent = label1;
+        items[1].setAttribute("href", "#remove");
+        items[1].setAttribute("onclick", "return false");
+        items[1].addEventListener("click", () => this.removeFromWatchlist());
+      } else items[1].parentElement.remove();
+    } else {
+      items[0].parentElement.remove();
+      items[1].parentElement.remove();
+    }
+
+    let label2 = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
+    items[2].setAttribute("aria-label", label2);
+    items[2].textContent = label2;
+    items[2].setAttribute("href", "#pause");
+    items[2].setAttribute("onclick", "return false");
+    items[2].addEventListener("click", () =>
+      GM_setValue("Pause watching", !this.config["Pause watching"])
+    );
+
+    let label3 = this.config["Automatically start delivery"]
+      ? "Disable automatic delivery"
+      : "Enable automatic delivery";
+    items[3].setAttribute("aria-label", label3);
+    items[3].textContent = label3;
+    items[3].setAttribute("href", "#autostart");
+    items[3].setAttribute("onclick", "return false");
+    items[3].addEventListener("click", () =>
+      GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
+    );
+
+    // Remove all the other items from the cloned menu.
+    items.slice(4).forEach(item => item.parentElement.remove());
+
+    ul.children[3].after(menu);
+  }
+
   // Open the card list editor dialog.
   editCardList() {
     // console.log("GoatBots Card Watcher: opening card list editor");
@@ -205,6 +335,10 @@ class CardWatcher {
 
     let dialog = document.createElement("dialog");
     dialog.className = "card-watcher-frame";
+
+    // The DOM menu we created in the navbar. We want to highlight the menu when
+    // the dialog is open, like the other GoatBots menus are highlighted.
+    let menu = document.getElementById("card-watcher-menu");
 
     // Main text-based dialog.
     let title = dialog.appendChild(document.createElement("h3"));
@@ -220,10 +354,8 @@ class CardWatcher {
     pathTitle.title =
       "The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.";
     let pathField = document.createElement("input");
-    pathField.minLength = 2;
     pathField.placeholder = path;
     pathField.value = path;
-    pathField.required = true;
     pathLabel.appendChild(pathField);
 
     let cardsLabel = form.appendChild(document.createElement("label"));
@@ -296,6 +428,22 @@ class CardWatcher {
       // console.log("GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
       switch (e.submitter) {
         case saveBtn: {
+          // Check that the path input is valid, and if not, dispatch a
+          // notification to the user through generic web API. We could set
+          // these values on the path field by default, but then the path field
+          // would need to be valid even when clicking the other buttons. We
+          // only care if it's valid when the user is clicking the save button.
+          // And I don't want to use click handlers because there are other ways
+          // to submit the form, like hitting Enter in an input field.
+          pathField.required = true;
+          pathField.minLength = 2;
+          if (!form.checkValidity()) {
+            // console.log("GoatBots Card Watcher: invalid path input");
+            form.reportValidity();
+            pathField.required = false;
+            pathField.minLength = 0;
+            return;
+          }
           // Save the current values.
           let path = pathField.value.trim();
           let cards = cardsField.value.trim().split(/\n+\s*/);
@@ -333,6 +481,8 @@ class CardWatcher {
           // Exit the dialog without saving anything.
           dialog.style.display = "none";
           dialog.remove();
+          // Un-highlight the menu node when we leave the dialog.
+          menu?.firstElementChild?.classList.remove("active");
           break;
       }
     };
@@ -373,6 +523,8 @@ class CardWatcher {
       title.style.removeProperty("display");
     };
     document.body.appendChild(dialog);
+    // Highlight the menu node.
+    menu?.firstElementChild?.classList.add("active");
     // Make sure the end of the path is selected so we can easily add the +
     // character to the end of the path.
     pathField.focus();
@@ -384,6 +536,7 @@ class CardWatcher {
     // console.log("GoatBots Card Watcher: remove from watchlist?");
     let idx = this.config.Watchlist.findIndex(page => page.path === location.pathname);
     if (idx !== -1) {
+      // Ask the user to confirm so they don't lose data.
       if (
         window.confirm(`Are you sure you want to remove ${location.pathname} from the watchlist?`)
       ) {
@@ -503,9 +656,11 @@ class CardWatcher {
     window.clearTimeout(this.timer);
     this.timer = window.setTimeout(() => {
       if (this.path === location.pathname) {
-        // Don't reload if the tab is active unless the setting is enabled.
+        // Don't reload if the dialog is open or if watching is paused. Also
+        // don't reload if the tab is active unless the setting is enabled.
         if (
           document.querySelector(".card-watcher-frame") ||
+          this.config["Pause watching"] ||
           !(document.hidden || this.config["Refresh while active"])
         ) {
           this.countdown();
@@ -644,6 +799,10 @@ class CardWatcher {
         ],
       },
     ],
+
+    // This is just used to define a user setting that we'll use to pause/resume
+    // the script's normal watching and reloading behavior.
+    "Pause watching": false,
 
     // When we detect new cards on the list, we automatically navigate to the
     // delivery page. But we can also automatically *start* delivery, making
@@ -801,6 +960,18 @@ class CardWatcher {
 .card-watcher-frame .button-box button[disabled] {
   pointer-events: none;
   opacity: 0.4;
+}
+#menu-wrap {
+  max-width: 95em !important;
+}
+@media only screen and (max-width:1399px) {
+  #menu,
+  #menu-wrap {
+    max-width: 82.5rem !important;
+  }
+}
+.card-watcher-menu > a {
+  white-space: nowrap;
 }`;
 
   audio = {
