@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.1.1
+// @version        1.1.2
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -111,12 +111,26 @@ if (GM4) {
 class CardWatcher {
   config = {};
 
+  /**
+   * Log a message to the console, if the user's log level is less than or equal
+   * to the message's. The lower the level, the more important the message is.
+   * By default, a level 0 message will be logged in the console, but a level 1
+   * message will not. For debugging purposes you can increase your log level
+   * setting to 4. That will capture all messages.
+   * @param {integer} level the message's log level.
+   * @param {string} mode the console method ("log" or "error" for example).
+   * @param {any} message anything worth logging.
+   */
+  log(level, mode = "log", ...message) {
+    if ((this.config["Debug log level"] ?? 0) >= level) console[mode](...message);
+  }
+
   constructor() {
     // Get the user settings or set them if they aren't already set.
     for (const [key, value] of Object.entries(this.defaults)) {
       let saved = GM_getValue(key);
       if (saved === undefined) {
-        // console.log(`GoatBots Card Watcher: writing setting ${key} :>> `, value);
+        this.log(4, "info", `GoatBots Card Watcher: writing setting ${key} :>> `, value);
         GM_setValue(key, value);
         this.config[key] = value;
       } else this.config[key] = saved;
@@ -144,12 +158,12 @@ class CardWatcher {
     // Check if the current page is not in the watchlist.
     let page = this.config.Watchlist.find(page => page.path === location.pathname);
     // Add a custom menu to the page DOM.
-    document.addEventListener("DOMContentLoaded", () => this.createMenu(page), { once: true });
+    document.addEventListener("DOMContentLoaded", () => this.createMenu(!!page), { once: true });
     // If we're on the delivery page...
     if (location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
       if (history.state && this.config["Automatically start delivery"]) {
-        // console.log("GoatBots Card Watcher: Automatically started delivery");
+        this.log(1, "info", "GoatBots Card Watcher: Automatically started delivery");
         let { autostart, previousURL } = history.state;
         // We use the history to store state between page loads. That way we can
         // avoid messing with the normal usage of GoatBots. When we auto-start
@@ -192,7 +206,7 @@ class CardWatcher {
       },
       { once: true }
     );
-    // console.log("GoatBots Card Watcher: watching the page");
+    this.log(2, "info", "GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
     // If the page's cards list is empty for some reason, do nothing.
@@ -209,9 +223,233 @@ class CardWatcher {
     this.alertAudio = new window.Audio("data:audio/mp3;base64," + this.audio["Alert audio file"]);
   }
 
+  // Invoked when the page finishes loading. Scan for new cards.
+  handleEvent() {
+    this.log(3, "info", "GoatBots Card Watcher: loaded");
+    let cards = [];
+    let rows = [];
+    // Scan every card in the page's price list.
+    for (let row of document.querySelector("#main .price-list")?.children) {
+      if (row.className === "header") continue;
+      let name = row.querySelector(".name")?.innerText?.trim();
+      if (this.cards.includes(name)) {
+        row.setAttribute("watching", "true");
+        // Only handle the card if it's in stock.
+        if (row.querySelector(".stock")?.classList.contains("out")) continue;
+        this.log(4, "info", `GoatBots Card Watcher: ${name} in stock`);
+        cards.push(name);
+        // If the card isn't already in our cart, add it.
+        if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
+          continue;
+        rows.push(row);
+      }
+    }
+    // Check delivery status. If a delivery is in progress, adding cards to cart
+    // or starting delivery would fail and cause repeated reloads.
+    let request = {
+      url: "/ajax/delivery-status",
+      success: data => {
+        data = JSON.parse(data);
+        if (!data) {
+          // If we found cards, start the alert process.
+          if (cards.length > 0) {
+            this.addToCart(rows);
+            if (this.config["Use text-to-speech"] && window.speechSynthesis) {
+              // Limit the length of the speech if user chose to.
+              let limit = this.config["Limit number of card names to speak"];
+              if (limit && typeof limit === "number") cards.splice(limit);
+              if (!this.config["Speak card numbers and tags"]) {
+                // Elide everything after the hash # character to remove number/tag.
+                cards = cards.map(item => item.split("#")[0].trim());
+              }
+              this.playSynthAlert(cards.join("; "));
+            } else this.playVoiceAlert();
+            return;
+          }
+        } else {
+          this.log(4, "info", "GoatBots Card Watcher: delivery active :>> ", data.text);
+          this.log(4, "info", "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+        }
+        this.countdown();
+      },
+    };
+    if (this.config["Debug log level"] > 1) request.debug = true;
+    Ajax(request);
+  }
+
+  // Start the reload timer.
+  countdown() {
+    this.log(3, "info", "GoatBots Card Watcher: waiting to reload");
+    window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => {
+      // Check delivery status. We don't reload if a delivery is in progress.
+      let request = {
+        url: "/ajax/delivery-status",
+        success: data => {
+          data = JSON.parse(data);
+          if (!data) {
+            if (this.path === location.pathname) {
+              // Don't reload if the dialog is open or if watching is paused. Also
+              // don't reload if the tab is active unless the setting is enabled.
+              if (
+                document.querySelector(".card-watcher-frame") ||
+                this.config["Pause watching"] ||
+                !(document.hidden || this.config["Refresh while active"])
+              ) {
+                this.countdown();
+              } else location.reload();
+            }
+          } else {
+            this.log(4, "info", "GoatBots Card Watcher: delivery active :>> ", data.text);
+            this.log(4, "info", "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+            this.countdown();
+          }
+        },
+      };
+      if (this.config["Debug log level"] > 1) request.debug = true;
+      Ajax(request);
+    }, this.config["Refresh interval"]);
+  }
+
+  /**
+   * Add the passed items to the cart. When all of them are finished, try to
+   * start delivery automatically. This relies on ajax requests and we can't add
+   * multiple items in one request, so we need to iterate over the items, only
+   * adding the next item when the current item finishes successfully.
+   * @param {array} rows [optional] an array containing all the items to add.
+   * @param {number} i [optional] the current array index.
+   */
+  addToCart(rows = [], i = 0) {
+    let row = rows[i];
+    // If the current row is valid, add it to cart.
+    if (row !== undefined) {
+      this.log(
+        3,
+        "info",
+        "GoatBots Card Watcher: adding " +
+          row.querySelector(".name")?.innerText?.trim() +
+          " to cart"
+      );
+      let request = {
+        url: "/ajax/delivery-item",
+        data: { item: row.dataset.item },
+        abort: "item" + row.dataset.item,
+        success: () => this.addToCart(rows, ++i),
+      };
+      if (this.config["Debug log level"] > 1) request.debug = true;
+      Ajax(request);
+    } else if (rows.length) {
+      // If the row is undefined, that means either 1) the array was somehow
+      // empty from the start, in which case we should do nothing; or 2) we got
+      // to the end of the array, meaning we're finished adding items to cart.
+      this.finishedAddingToCart = true;
+      this.tryDelivery();
+    }
+  }
+
+  // Either start delivery or go to the delivery page.
+  tryDelivery() {
+    // Only proceed if the speech/audio is finished (async) and we're finished
+    // adding items to cart (iterative). This will be called multiple times and
+    // only the last call will actually start delivery.
+    if (this.finishedSpeaking && this.finishedAddingToCart) {
+      if (this.config["Automatically start delivery"]) {
+        // If the setting is enabled, start delivery automatically.
+        let request = {
+          url: "/ajax/delivery-start",
+          leaving: true,
+          success: () => {
+            // If the delivery start request succeeds as it should, go the
+            // delivery page and save the current URL with the history API so we
+            // can recover it after the delivery is finished. That's necessary
+            // because this CardWatcher instance will be flushed when the
+            // document changes and replaced by a new instance with no memory of
+            // the previous one or its triggering delivery. We want to be able
+            // to distinguish between the *user* starting delivery manually and
+            // the *script* starting delivery automatically. That way we don't
+            // screw up the normal usage of GoatBots.
+            history.pushState({ autostart: true, previousURL: location.href }, "", "/delivery");
+            location.reload();
+          },
+        };
+        if (this.config["Debug log level"] > 1) request.debug = true;
+        Ajax(request);
+        this.log(1, "info", "GoatBots Card Watcher: starting delivery");
+      } else {
+        // Just go to the delivery page without starting delivery.
+        location = "/delivery";
+      }
+    } else {
+      this.log(
+        2,
+        "info",
+        "GoatBots Card Watcher: waiting for " + this.finishedSpeaking
+          ? "items to be added to cart"
+          : "speech/audio to finish"
+      );
+    }
+  }
+
+  /**
+   * Convert the card names into audible speech.
+   * @param {string} words the card names to turn into speech.
+   */
+  playSynthAlert(words) {
+    if (words) {
+      this.log(2, "info", "GoatBots Card Watcher: speech synth startup");
+      let speech = new window.SpeechSynthesisUtterance();
+      this.voices = window.speechSynthesis.getVoices();
+      speech.text = words;
+      speech.rate = this.config["Text-to-speech rate"];
+      // If speech synthesis isn't working, use the generic voice file.
+      if (this.voices) {
+        if (!window.speechSynthesis.speaking) {
+          // Trigger delivery when the alert is finished. I'd prefer to do this
+          // sooner but navigation ends the speech synthesis.
+          speech.onend = () => {
+            this.finishedSpeaking = true;
+            this.tryDelivery();
+            speech.onend = null;
+          };
+          this.log(3, "info", "GoatBots Card Watcher: speaking words :>> ", words);
+          this.alertAudio.play();
+          window.speechSynthesis.speak(speech);
+        } else {
+          this.log(2, "info", "GoatBots Card Watcher: speech synth busy");
+        }
+        return;
+      }
+    } else {
+      this.log(1, "error", "GoatBots Card Watcher: speech synth sent invalid card names");
+    }
+    this.playVoiceAlert();
+  }
+
+  // Play a predefined audio alert.
+  playVoiceAlert() {
+    // Trigger delivery when the alert is finished.
+    this.voiceAudio.onended = () => {
+      this.finishedSpeaking = true;
+      this.tryDelivery();
+      this.voiceAudio.onended = null;
+    };
+    this.log(2, "info", "GoatBots Card Watcher: playing audio");
+    this.alertAudio.play();
+    this.voiceAudio.play();
+  }
+
+  /**
+   * User setting change event handler. This is how we handle real-time update
+   * of settings. When a setting changes, we hear about it and can respond
+   * accordingly, changing values and labels and so on.
+   * @param {string} id the name of the setting changed.
+   * @param {any} oldValue the setting's previous value.
+   * @param {any} newValue the setting's new value, the setting of which created this event.
+   * @param {boolean} remote whether the value was changed in a different tab than this one.
+   */
   onValueChange(id, oldValue, newValue, remote) {
     if (oldValue === newValue) return;
-    // console.log("GoatBots Card Watcher: setting updated — " + id + " :>> " + newValue);
+    this.log(4, "info", "GoatBots Card Watcher: setting updated — " + id + " :>> ", newValue);
     this.config[id] = newValue;
     let menu = document.getElementById("card-watcher-menu");
     switch (id) {
@@ -221,7 +459,7 @@ class CardWatcher {
           let item = menu.querySelector("a[href='#pause']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        }
+        } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
         if (!remote && !newValue && oldValue && this.cards?.length) location.reload();
         GM_unregisterMenuCommand(oldValue ? "Resume watching" : "Pause watching");
         GM_registerMenuCommand(newValue ? "Resume watching" : "Pause watching", () => {
@@ -236,7 +474,7 @@ class CardWatcher {
           let item = menu.querySelector("a[href='#autostart']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        }
+        } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
         GM_unregisterMenuCommand(
           oldValue ? "Disable automatic delivery" : "Enable automatic delivery"
         );
@@ -245,91 +483,14 @@ class CardWatcher {
           () => GM_setValue("Automatically start delivery", !newValue)
         );
         break;
+      default:
+        break;
     }
-  }
-
-  createMenu(page) {
-    // Make a menu in the navbar with the same options as in the script manager.
-    let nav = document.querySelector("nav");
-    if (!nav || nav.querySelector("ul > li#card-watcher-menu")) return;
-    // console.log("GoatBots Card Watcher: creating the DOM menu");
-    let ul = nav.querySelector("ul");
-    let menu = ul.children[3].cloneNode(true);
-    menu.id = "card-watcher-menu";
-    let label = menu.firstElementChild;
-    label.dataset.submenu = "cardwatcher";
-    label.classList.remove("active");
-    label.setAttribute("href", "#cardwatcher");
-    label.setAttribute("aria-label", "Card Watcher menu");
-    label.firstChild.textContent = `\nCard Watcher\n`;
-    let submenu = menu.lastElementChild;
-    submenu.id = "submenu-cardwatcher";
-
-    document.body.addEventListener("keydown", e => {
-      if (e.code === "Enter") {
-        let item = document.getElementById("card-watcher-menu").querySelector("li.selected");
-        if (item) {
-          // console.log("GoatBots Card Watcher: overriding Enter key behavior for our menu items");
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          item.firstElementChild.click();
-        }
-      }
-    });
-
-    let items = [];
-    for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
-    if (document.querySelector("#main .price-list")) {
-      let label0 = page ? "Edit page's card list" : "Add page to watchlist";
-      items[0].setAttribute("aria-label", label0);
-      items[0].textContent = label0;
-      items[0].setAttribute("href", "#cardlist");
-      items[0].setAttribute("onclick", "return false");
-      items[0].addEventListener("click", () => this.editCardList());
-
-      if (page) {
-        let label1 = "Remove page from watchlist";
-        items[1].setAttribute("aria-label", label1);
-        items[1].textContent = label1;
-        items[1].setAttribute("href", "#remove");
-        items[1].setAttribute("onclick", "return false");
-        items[1].addEventListener("click", () => this.removeFromWatchlist());
-      } else items[1].parentElement.remove();
-    } else {
-      items[0].parentElement.remove();
-      items[1].parentElement.remove();
-    }
-
-    let label2 = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
-    items[2].setAttribute("aria-label", label2);
-    items[2].textContent = label2;
-    items[2].setAttribute("href", "#pause");
-    items[2].setAttribute("onclick", "return false");
-    items[2].addEventListener("click", () =>
-      GM_setValue("Pause watching", !this.config["Pause watching"])
-    );
-
-    let label3 = this.config["Automatically start delivery"]
-      ? "Disable automatic delivery"
-      : "Enable automatic delivery";
-    items[3].setAttribute("aria-label", label3);
-    items[3].textContent = label3;
-    items[3].setAttribute("href", "#autostart");
-    items[3].setAttribute("onclick", "return false");
-    items[3].addEventListener("click", () =>
-      GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
-    );
-
-    // Remove all the other items from the cloned menu.
-    items.slice(4).forEach(item => item.parentElement.remove());
-
-    ul.children[3].after(menu);
   }
 
   // Open the card list editor dialog.
   editCardList() {
-    // console.log("GoatBots Card Watcher: opening card list editor");
+    this.log(2, "info", "GoatBots Card Watcher: opening card list editor");
     let page = this.config.Watchlist.find(page => page.path === location.pathname);
     let { path, cards } = page ?? { path: location.pathname };
 
@@ -416,7 +577,7 @@ class CardWatcher {
         e.stopImmediatePropagation();
         e.stopPropagation();
         e.preventDefault();
-        // console.log("GoatBots Card Watcher: card row selected by click :>> ", row);
+        this.log(3, "info", "GoatBots Card Watcher: card row selected by click :>> ", row);
         if (row.hasAttribute("watching")) row.removeAttribute("watching");
         else row.setAttribute("watching", "true");
       }
@@ -425,7 +586,12 @@ class CardWatcher {
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      // console.log("GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
+      this.log(
+        2,
+        "info",
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
       switch (e.submitter) {
         case saveBtn: {
           // Check that the path input is valid, and if not, dispatch a
@@ -438,7 +604,7 @@ class CardWatcher {
           pathField.required = true;
           pathField.minLength = 2;
           if (!form.checkValidity()) {
-            // console.log("GoatBots Card Watcher: invalid path input");
+            this.log(3, "warn", "GoatBots Card Watcher: invalid path input");
             form.reportValidity();
             pathField.required = false;
             pathField.minLength = 0;
@@ -490,7 +656,12 @@ class CardWatcher {
     // Click-to-select form submission handler.
     clickSelectForm.onsubmit = e => {
       e.preventDefault();
-      // console.log("GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
+      this.log(
+        2,
+        "info",
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
       switch (e.submitter) {
         case clickSelectConfirmBtn: {
           // Add the selected cards to the card list field
@@ -533,14 +704,14 @@ class CardWatcher {
 
   // Delete the current page from the watchlist.
   removeFromWatchlist() {
-    // console.log("GoatBots Card Watcher: remove from watchlist?");
+    this.log(3, "info", "GoatBots Card Watcher: remove from watchlist?");
     let idx = this.config.Watchlist.findIndex(page => page.path === location.pathname);
     if (idx !== -1) {
       // Ask the user to confirm so they don't lose data.
       if (
         window.confirm(`Are you sure you want to remove ${location.pathname} from the watchlist?`)
       ) {
-        // console.log("GoatBots Card Watcher: yes, remove from watchlist");
+        this.log(3, "info", "GoatBots Card Watcher: yes, remove from watchlist");
         this.config.Watchlist.splice(idx, 1);
         GM_setValue("Watchlist", this.config.Watchlist);
         location.reload();
@@ -548,164 +719,90 @@ class CardWatcher {
     }
   }
 
-  // Invoked when the page finishes loading. Scan for new cards.
-  handleEvent() {
-    // console.log("GoatBots Card Watcher: loaded");
-    let cards = [];
-    let rows = [];
-    // Scan every card in the page's price list.
-    for (let row of document.querySelector("#main .price-list")?.children) {
-      if (row.className === "header") continue;
-      let name = row.querySelector(".name")?.innerText?.trim();
-      if (this.cards.includes(name)) {
-        row.setAttribute("watching", "true");
-        // Only handle the card if it's in stock.
-        if (row.querySelector(".stock")?.classList.contains("out")) continue;
-        // console.log(`GoatBots Card Watcher: ${name} in stock`);
-        cards.push(name);
-        // If the card isn't already in our cart, add it.
-        if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
-          continue;
-        rows.push(row);
-      }
-    }
-    // If we found cards, start the alert process.
-    if (cards.length > 0) {
-      this.addToCart(rows);
-      if (this.config["Use text-to-speech"] && window.speechSynthesis) {
-        if (!this.config["Speak card numbers and tags"]) {
-          // Elide everything after the hash # character to remove number/tag
-          cards = cards.map(item => item.split("#")[0].trim());
-        }
-        this.playSynthAlert(cards.join("; "));
-      } else this.playVoiceAlert();
-    } else {
-      // Otherwise, start the reload timer.
-      this.countdown();
-    }
-  }
-
   /**
-   * Add the passed items to the cart. When all of them are finished, try to
-   * start delivery automatically. This relies on ajax requests and we can't add
-   * multiple items in one request, so we need to iterate over the items, only
-   * adding the next item when the current item finishes successfully.
-   * @param {array} rows an array containing all the items to add.
-   * @param {number} i the current array index.
+   * Make a menu in the navbar with the same options as in the script manager.
+   * @param {boolean} handling [optional] whether the current page is being watched.
    */
-  addToCart(rows = [], i = 0) {
-    let row = rows[i];
-    // If the current row is valid, add it to cart.
-    if (row !== undefined) {
-      // console.log(`GoatBots Card Watcher: adding ${row.querySelector(".name")?.innerText?.trim()} to cart`);
-      Ajax({
-        url: "/ajax/delivery-item",
-        data: { item: row.dataset.item },
-        abort: "item" + row.dataset.item,
-        success: () => this.addToCart(rows, ++i),
-      });
-    } else if (rows.length) {
-      // If the row is undefined, that means either 1) the array was somehow
-      // empty from the start, in which case we should do nothing; or 2) we got
-      // to the end of the array, meaning we're finished adding items to cart.
-      this.finishedAddingToCart = true;
-      this.tryDelivery();
-    }
-  }
+  createMenu(handling = false) {
+    let nav = document.querySelector("nav");
+    if (!nav || nav.querySelector("ul > li#card-watcher-menu")) return;
+    this.log(4, "info", "GoatBots Card Watcher: creating the DOM menu");
+    let ul = nav.querySelector("ul");
+    let menu = ul.children[3].cloneNode(true);
+    menu.id = "card-watcher-menu";
+    let label = menu.firstElementChild;
+    label.dataset.submenu = "cardwatcher";
+    label.classList.remove("active");
+    label.setAttribute("href", "#cardwatcher");
+    label.setAttribute("aria-label", "Card Watcher menu");
+    label.firstChild.textContent = `\nCard Watcher\n`;
+    let submenu = menu.lastElementChild;
+    submenu.id = "submenu-cardwatcher";
 
-  // Convert the card names into audible speech.
-  playSynthAlert(words) {
-    // console.log("GoatBots Card Watcher: speech synth startup");
-    let speech = new window.SpeechSynthesisUtterance();
-    this.voices = window.speechSynthesis.getVoices();
-    speech.text = words;
-    speech.rate = this.config["Text-to-speech rate"];
-    // If speech synthesis isn't working, use the generic voice file.
-    if (this.voices) {
-      if (!window.speechSynthesis.speaking) {
-        // Trigger delivery when the alert is finished. I'd prefer to do this
-        // sooner but navigation ends the speech synthesis.
-        speech.onend = () => {
-          this.finishedSpeaking = true;
-          this.tryDelivery();
-          speech.onend = null;
-        };
-        // console.log("GoatBots Card Watcher: speaking words :>> ", words);
-        this.alertAudio.play();
-        window.speechSynthesis.speak(speech);
+    document.body.addEventListener("keydown", e => {
+      if (e.code === "Enter") {
+        let item = document.getElementById("card-watcher-menu").querySelector("li.selected");
+        if (item) {
+          this.log(
+            2,
+            "info",
+            "GoatBots Card Watcher: overriding Enter key behavior for our menu items"
+          );
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          item.firstElementChild.click();
+        }
       }
-    } else this.playVoiceAlert();
-  }
+    });
 
-  // Play a predefined audio alert.
-  playVoiceAlert() {
-    // Trigger delivery when the alert is finished.
-    this.voiceAudio.onended = () => {
-      this.finishedSpeaking = true;
-      this.tryDelivery();
-      this.voiceAudio.onended = null;
-    };
-    // console.log("GoatBots Card Watcher: playing audio");
-    this.alertAudio.play();
-    this.voiceAudio.play();
-  }
+    let items = [];
+    for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
+    if (document.querySelector("#main .price-list")) {
+      let label0 = handling ? "Edit page's card list" : "Add page to watchlist";
+      items[0].setAttribute("aria-label", label0);
+      items[0].textContent = label0;
+      items[0].setAttribute("href", "#cardlist");
+      items[0].setAttribute("onclick", "return false");
+      items[0].addEventListener("click", () => this.editCardList());
 
-  // Start the reload timer.
-  countdown() {
-    // console.log("GoatBots Card Watcher: waiting to reload");
-    window.clearTimeout(this.timer);
-    this.timer = window.setTimeout(() => {
-      if (this.path === location.pathname) {
-        // Don't reload if the dialog is open or if watching is paused. Also
-        // don't reload if the tab is active unless the setting is enabled.
-        if (
-          document.querySelector(".card-watcher-frame") ||
-          this.config["Pause watching"] ||
-          !(document.hidden || this.config["Refresh while active"])
-        ) {
-          this.countdown();
-        } else location.reload();
-      }
-    }, this.config["Refresh interval"]);
-  }
-
-  // Either start delivery or go to the delivery page.
-  tryDelivery() {
-    // Only proceed if the speech/audio is finished (async) and we're finished
-    // adding items to cart (iterative). This will be called multiple times and
-    // only the last call will actually start delivery.
-    if (this.finishedSpeaking && this.finishedAddingToCart) {
-      if (this.config["Automatically start delivery"]) {
-        // If the setting is enabled, start delivery automatically.
-        Ajax({
-          url: "/ajax/delivery-start",
-          leaving: true,
-          success: () => {
-            // If the delivery start request succeeds as it should, go the
-            // delivery page and save the current URL with the history API so we
-            // can recover it after the delivery is finished. That's necessary
-            // because this CardWatcher instance will be flushed when the
-            // document changes and replaced by a new instance with no memory of
-            // the previous one or its triggering delivery. We want to be able
-            // to distinguish between the *user* starting delivery manually and
-            // the *script* starting delivery automatically. That way we don't
-            // screw up the normal usage of GoatBots.
-            history.pushState({ autostart: true, previousURL: location.href }, "", "/delivery");
-            location.reload();
-          },
-        });
-        // console.log("GoatBots Card Watcher: starting delivery");
-      } else {
-        // Just go to the delivery page without starting delivery.
-        location = "/delivery";
-      }
+      if (handling) {
+        let label1 = "Remove page from watchlist";
+        items[1].setAttribute("aria-label", label1);
+        items[1].textContent = label1;
+        items[1].setAttribute("href", "#remove");
+        items[1].setAttribute("onclick", "return false");
+        items[1].addEventListener("click", () => this.removeFromWatchlist());
+      } else items[1].parentElement.remove();
     } else {
-      // console.log(
-      //   "GoatBots Card Watcher: waiting for " + this.finishedSpeaking
-      //     ? "items to be added to cart"
-      //     : "speech/audio to finish"
-      // );
+      items[0].parentElement.remove();
+      items[1].parentElement.remove();
     }
+
+    let label2 = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
+    items[2].setAttribute("aria-label", label2);
+    items[2].textContent = label2;
+    items[2].setAttribute("href", "#pause");
+    items[2].setAttribute("onclick", "return false");
+    items[2].addEventListener("click", () =>
+      GM_setValue("Pause watching", !this.config["Pause watching"])
+    );
+
+    let label3 = this.config["Automatically start delivery"]
+      ? "Disable automatic delivery"
+      : "Enable automatic delivery";
+    items[3].setAttribute("aria-label", label3);
+    items[3].textContent = label3;
+    items[3].setAttribute("href", "#autostart");
+    items[3].setAttribute("onclick", "return false");
+    items[3].addEventListener("click", () =>
+      GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
+    );
+
+    // Remove all the other items from the cloned menu.
+    items.slice(4).forEach(item => item.parentElement.remove());
+
+    ul.children[3].after(menu);
   }
 
   // These are the default config values. There's some additional detail on the
@@ -851,6 +948,17 @@ class CardWatcher {
     // set to true it will just speak the card names exactly as they are.
     "Speak card numbers and tags": true,
 
+    // If there are many cards to add to the cart, saying all their names out
+    // loud might be very slow. And we wait for speech to finish before starting
+    // delivery, since starting delivery will stop the speech. So if it has to
+    // say 10 names, that could mean 20-30 seconds before we initiate delivery.
+    // And that means someone else might initiate delivery on one of the desired
+    // items first. So this optional setting allows you to put a cap on the
+    // number of names spoken. If this setting is falsy (that means any of
+    // false, 0, "", null, undefined), then there is no limit. Any positive
+    // integer will set a proper limit. I personally set this to 3.
+    "Limit number of card names to speak": 0,
+
     // How fast should the text-to-speech voice be? The value can range between
     // 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the
     // current platform or voice, which should correspond to a normal speaking
@@ -860,6 +968,14 @@ class CardWatcher {
     // doesn't navigate to the delivery page until the voice alert has finished.
     // So, a slower voice rate might mean a longer delay in starting delivery.
     "Text-to-speech rate": 1.1,
+
+    // An integer between 0 and 4. At the default, level 0, we won't log
+    // anything (except maybe some important errors) to the console. At level 1,
+    // major debug messages will be logged. At level 2, less significant
+    // messages. And so on. The max value 4 will log everything. If you need my
+    // help troubleshooting something, set this to 4, try to reproduce the bug,
+    // and then copy the contents of your console and send it to me.
+    "Debug log level": 0,
   };
 
   css = /* css */ `.price-list > li[watching] > a {
