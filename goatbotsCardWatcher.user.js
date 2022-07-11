@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.1.3
+// @version        1.1.4
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -25,12 +25,12 @@
 // instructions and details in the script.
 
 // When you first open a GoatBots page, open the menu popup and click the button
-// that says "Add page to watchlist" to make a watchlist editor appear. The top
+// that says "Add Page to Watchlist" to make a watchlist editor appear. The top
 // text field is the path field. It defaults to the path of the current page. If
 // you want to still be able to use the normal GoatBots page without it
 // constantly reloading, add a + at the end of the page URL, like in the page
-// paths for the example watchlist. You can navigate to the URL just fine with a
-// + at the end, and the script will correctly recognize it as a different URL.
+// paths for the example watchlist. You can navigate to the URL just fine with +
+// at the end, and the script will correctly recognize it as a different URL.
 // Then, the script will only activate when you explicitly navigate to the +
 // version of the URL, which you can bookmark.
 
@@ -49,10 +49,10 @@
 // you can still use the page as normal. That way, it will only scan in the
 // background, and alert you when it finds something. However, this pausing
 // behavior can be disabled by setting "Refresh while active" to true in the
-// advanced settings, which can be accessed through your script manager. I
-// recommend Violentmonkey, which lets you edit scripts in its main page. Open
-// this script in the script editor, and click the "Values" tab. You can set the
-// values of any of the settings in this interface, including the watchlist.
+// advanced settings, which can be accessed through the menu. You can set the
+// values of any of the settings in this interface, except for the watchlist. If
+// you need to make bulk changes to the watchlist, go to the script page in your
+// script manager and click on the "Values" tab.
 
 // The "Automatically start delivery" setting lets you begin delivery as soon as
 // new cards are detected. This increases the chances that you'll get the cards,
@@ -141,18 +141,19 @@ class CardWatcher {
     // Add menu commands for auto-start delivery and pause watching.
     GM_registerMenuCommand(
       this.config["Automatically start delivery"]
-        ? "Disable automatic delivery"
-        : "Enable automatic delivery",
+        ? "Disable Automatic Delivery"
+        : "Enable Automatic Delivery",
       () =>
         GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
     );
     GM_registerMenuCommand(
-      this.config["Pause watching"] ? "Resume watching" : "Pause watching",
+      this.config["Pause watching"] ? "Resume Watching" : "Pause Watching",
       () => {
         GM_setValue("Pause watching", !this.config["Pause watching"]);
         if (this.config["Pause watching"] && this.cards?.length) location.reload();
       }
     );
+    GM_registerMenuCommand("Advanced Settings", () => this.advancedDialog());
     // Add styles to highlight watched cards.
     GM_addStyle(this.css);
     // Check if the current page is not in the watchlist.
@@ -189,7 +190,7 @@ class CardWatcher {
               !document.getElementById("delivery-steps") &&
               !document.getElementById("delivery-count")?.textContent
             ) {
-              location = previousURL;
+              location.href = previousURL;
             }
           });
         }
@@ -201,22 +202,15 @@ class CardWatcher {
       "DOMContentLoaded",
       () => {
         if (document.querySelector("#main .price-list")) {
-          GM_registerMenuCommand(page ? "Edit page's card list" : "Add page to watchlist", () =>
-            this.editCardList()
+          GM_registerMenuCommand(page ? "Edit Cards List" : "Add Page to Watchlist", () =>
+            this.editCardListDialog()
           );
         }
       },
       { once: true }
     );
     if (!page) return;
-    document.addEventListener(
-      "DOMContentLoaded",
-      () => {
-        if (document.querySelector("#main .price-list"))
-          GM_registerMenuCommand("Remove page from watchlist", () => this.removeFromWatchlist());
-      },
-      { once: true }
-    );
+    GM_registerMenuCommand("Remove Page from Watchlist", () => this.removeFromWatchlist());
     this.log(2, "info", "GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
@@ -224,7 +218,6 @@ class CardWatcher {
     if (!this.cards.length) return;
     document.addEventListener("DOMContentLoaded", this, { once: true });
     if (this.config["Use text-to-speech"] && window.speechSynthesis) {
-      this.voices = [];
       window.speechSynthesis.onvoiceschanged = () => {
         this.voices = window.speechSynthesis.getVoices();
       };
@@ -303,7 +296,7 @@ class CardWatcher {
               // Don't reload if the dialog is open or if watching is paused. Also
               // don't reload if the tab is active unless the setting is enabled.
               if (
-                document.querySelector(".card-watcher-frame") ||
+                document.querySelector(".card-watcher-dialog") ||
                 this.config["Pause watching"] ||
                 !(document.hidden || this.config["Refresh while active"])
               ) {
@@ -388,7 +381,7 @@ class CardWatcher {
         this.log(1, "info", "GoatBots Card Watcher: starting delivery");
       } else {
         // Just go to the delivery page without starting delivery.
-        location = "/delivery";
+        location.href = "/delivery";
       }
     } else {
       this.log(
@@ -466,31 +459,31 @@ class CardWatcher {
     switch (id) {
       case "Pause watching":
         if (menu) {
-          let label = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
+          let label = this.config["Pause watching"] ? "Resume Watching" : "Pause Watching";
           let item = menu.querySelector("a[href='#pause']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
         } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
         if (!remote && !newValue && oldValue && this.cards?.length) location.reload();
-        GM_unregisterMenuCommand(oldValue ? "Resume watching" : "Pause watching");
-        GM_registerMenuCommand(newValue ? "Resume watching" : "Pause watching", () => {
+        GM_unregisterMenuCommand(oldValue ? "Resume Watching" : "Pause Watching");
+        GM_registerMenuCommand(newValue ? "Resume Watching" : "Pause Watching", () => {
           GM_setValue("Pause watching", !newValue);
         });
         break;
       case "Automatically start delivery":
         if (menu) {
           let label = this.config["Automatically start delivery"]
-            ? "Disable automatic delivery"
-            : "Enable automatic delivery";
+            ? "Disable Automatic Delivery"
+            : "Enable Automatic Delivery";
           let item = menu.querySelector("a[href='#autostart']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
         } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
         GM_unregisterMenuCommand(
-          oldValue ? "Disable automatic delivery" : "Enable automatic delivery"
+          oldValue ? "Disable Automatic Delivery" : "Enable Automatic Delivery"
         );
         GM_registerMenuCommand(
-          newValue ? "Disable automatic delivery" : "Enable automatic delivery",
+          newValue ? "Disable Automatic Delivery" : "Enable Automatic Delivery",
           () => GM_setValue("Automatically start delivery", !newValue)
         );
         break;
@@ -500,13 +493,15 @@ class CardWatcher {
   }
 
   // Open the card list editor dialog.
-  editCardList() {
+  editCardListDialog() {
+    if (document.querySelector(".card-watcher-dialog")) return;
     this.log(2, "info", "GoatBots Card Watcher: opening card list editor");
     let page = this.config.Watchlist.find(page => page.path === location.pathname);
     let { path, cards } = page ?? { path: location.pathname };
 
     let dialog = document.createElement("dialog");
-    dialog.className = "card-watcher-frame";
+    dialog.className = "card-watcher-dialog";
+    dialog.id = "card-watcher-editor-dialog";
 
     // The DOM menu we created in the navbar. We want to highlight the menu when
     // the dialog is open, like the other GoatBots menus are highlighted.
@@ -514,17 +509,17 @@ class CardWatcher {
 
     // Main text-based dialog.
     let title = dialog.appendChild(document.createElement("h3"));
-    title.textContent = cards ? "Edit cards list" : "Add page to watchlist";
+    title.textContent = cards ? "Edit Cards List" : "Add Page to Watchlist";
     let form = dialog.appendChild(document.createElement("form"));
     form.setAttribute("method", "dialog");
+    form.noValidate = true;
 
     let pathLabel = form.appendChild(document.createElement("label"));
     pathLabel.id = "card-watcher-path";
     let pathTitle = pathLabel.appendChild(document.createElement("span"));
     pathTitle.textContent = "Page path:";
     pathTitle.style.cursor = "help";
-    pathTitle.title =
-      "The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.";
+    pathTitle.title = `The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.`;
     let pathField = document.createElement("input");
     pathField.placeholder = path;
     pathField.value = path;
@@ -539,6 +534,7 @@ class CardWatcher {
     let exampleCard2 = exampleCard1?.nextElementSibling;
     let exampleCardText1 = exampleCard1?.querySelector(".name")?.textContent || "Example Card #1";
     let exampleCardText2 = exampleCard2?.querySelector(".name")?.textContent || "Example Card #2";
+    cardsField.spellcheck = false;
     cardsField.placeholder = `Add card names exactly as they appear in the page, separated by a line break:\n\n${exampleCardText1}\n${exampleCardText2}`;
     if (cards) cardsField.value = cards.join(`\n`);
 
@@ -546,30 +542,33 @@ class CardWatcher {
     buttonBox.className = "button-box";
 
     let saveBtn = buttonBox.appendChild(document.createElement("button"));
-    saveBtn.setAttribute("mode", "save");
+    saveBtn.setAttribute("mode", "list-save");
     saveBtn.textContent = "Save";
 
     let clickSelectBtn = buttonBox.appendChild(document.createElement("button"));
     clickSelectBtn.setAttribute("mode", "select");
-    clickSelectBtn.textContent = "Select by clicking";
+    clickSelectBtn.textContent = "Select by Clicking";
 
     let removeBtn;
     if (page) {
       removeBtn = buttonBox.appendChild(document.createElement("button"));
       removeBtn.setAttribute("mode", "remove");
-      removeBtn.textContent = "Remove page";
+      removeBtn.textContent = "Remove Page";
     }
 
     let cancelBtn = buttonBox.appendChild(document.createElement("button"));
-    cancelBtn.setAttribute("mode", "cancel");
+    cancelBtn.setAttribute("mode", "list-cancel");
     cancelBtn.textContent = "Cancel";
 
     // Click select dialog.
     let clickSelectTitle = dialog.appendChild(document.createElement("h3"));
     clickSelectTitle.style.display = "none";
-    clickSelectTitle.textContent = "Add items by clicking them";
+    clickSelectTitle.textContent = "Select by Clicking";
+    clickSelectTitle.style.cursor = "help";
+    clickSelectTitle.title = `Click cards in the price list to add them to the cards list. Cards in the list are highlighted in green, and clicking them will remove them from the cards list.`;
     let clickSelectForm = dialog.appendChild(document.createElement("form"));
     clickSelectForm.setAttribute("method", "dialog");
+    clickSelectForm.noValidate = true;
     clickSelectForm.style.display = "none";
 
     let clickSelectButtonBox = clickSelectForm.appendChild(document.createElement("div"));
@@ -605,6 +604,9 @@ class CardWatcher {
       );
       switch (e.submitter) {
         case saveBtn: {
+          // Save the current values.
+          let path = pathField.value.trim();
+          let cards = cardsField.value.split(/\n+\s*/).filter(val => !!val);
           // Check that the path input is valid, and if not, dispatch a
           // notification to the user through generic web API. We could set
           // these values on the path field by default, but then the path field
@@ -614,23 +616,47 @@ class CardWatcher {
           // to submit the form, like hitting Enter in an input field.
           pathField.required = true;
           pathField.minLength = 2;
+          pathField.pattern = "^/.*";
+          pathField.title = "/" + path;
+          let resetPathField = () => {
+            pathField.removeAttribute("required");
+            pathField.removeAttribute("minlength");
+            pathField.removeAttribute("pattern");
+            pathField.removeAttribute("title");
+          };
           if (!form.checkValidity()) {
             this.log(3, "warn", "GoatBots Card Watcher: invalid path input");
             form.reportValidity();
-            pathField.required = false;
-            pathField.minLength = 0;
+            resetPathField();
             return;
           }
-          // Save the current values.
-          let path = pathField.value.trim();
-          let cards = cardsField.value.trim().split(/\n+\s*/);
+          resetPathField();
+          // Check that the cards field is not effectively empty.
+          if (!cards.length) {
+            cardsField.value = "";
+            cardsField.required = true;
+            if (!form.checkValidity()) {
+              this.log(3, "warn", "GoatBots Card Watcher: invalid cards input");
+              form.reportValidity();
+              cardsField.required = false;
+              return;
+            }
+            cardsField.required = false;
+          }
           if (page) {
+            // If there was no change to the watchlist, don't bother with
+            // updating user settings or reloading the page.
+            if (page.path === path && JSON.stringify(page.cards) === JSON.stringify(cards)) break;
             page.path = path;
             page.cards = cards;
           } else this.config.Watchlist.push({ path, cards });
           GM_setValue("Watchlist", this.config.Watchlist);
-          location = path;
-          break;
+          // If the user modified the path field such that it no longer matches
+          // the current page URL, navigate to the new path to begin watching.
+          // Otherwise just reload, so we don't lose scroll position.
+          if (location.pathname === path) location.reload();
+          else location.href = path;
+          return;
         }
         case clickSelectBtn: {
           // Handle selecting cards by click.
@@ -645,23 +671,23 @@ class CardWatcher {
             if (name && cards.includes(name)) row.setAttribute("watching", "true");
             else row.removeAttribute("watching");
           }
-          break;
+          return;
         }
         case removeBtn: {
           // Remove the current page from the watchlist and reload.
           this.removeFromWatchlist();
-          break;
+          return;
         }
         case cancelBtn:
         // fall through
         default:
-          // Exit the dialog without saving anything.
-          dialog.style.display = "none";
-          dialog.remove();
-          // Un-highlight the menu node when we leave the dialog.
-          menu?.firstElementChild?.classList.remove("active");
           break;
       }
+      // Exit the dialog without saving anything.
+      dialog.style.display = "none";
+      dialog.remove();
+      // Un-highlight the menu node when we leave the dialog.
+      menu?.firstElementChild?.classList.remove("active");
     };
 
     // Click-to-select form submission handler.
@@ -711,6 +737,182 @@ class CardWatcher {
     // character to the end of the path.
     pathField.focus();
     pathField.scrollTo({ left: pathField.scrollWidth });
+  }
+
+  // Open the advanced settings dialog.
+  advancedDialog() {
+    if (document.querySelector(".card-watcher-dialog")) return;
+    this.log(2, "info", "GoatBots Card Watcher: opening advanced settings dialog");
+
+    let dialog = document.createElement("dialog");
+    dialog.className = "card-watcher-dialog";
+    dialog.id = "card-watcher-advanced-dialog";
+
+    // The DOM menu we created in the navbar. We want to highlight the menu when
+    // the dialog is open, like the other GoatBots menus are highlighted.
+    let menu = document.getElementById("card-watcher-menu");
+
+    // Main text-based dialog.
+    let title = dialog.appendChild(document.createElement("h3"));
+    title.textContent = "Advanced Settings";
+    let form = dialog.appendChild(document.createElement("form"));
+    form.setAttribute("method", "dialog");
+    form.noValidate = true;
+
+    let refreshIntervalLabel = form.appendChild(document.createElement("label"));
+    refreshIntervalLabel.id = "card-watcher-refresh-interval";
+    let refreshIntervalTitle = refreshIntervalLabel.appendChild(document.createElement("span"));
+    refreshIntervalTitle.textContent = "Refresh interval:";
+    refreshIntervalTitle.style.cursor = "help";
+    refreshIntervalTitle.title = `How often to refresh the page to check stock, in milliseconds. This should be set to at least the average page load time. If it normally takes 2 seconds for the page to finish loading (as indicated by a loading icon in your browser, etc.), then you don't want to set this to less than 2000.`;
+    let refreshIntervalField = document.createElement("input");
+    refreshIntervalField.type = "number";
+    refreshIntervalField.required = true;
+    refreshIntervalField.step = 1000;
+    refreshIntervalField.min = 1000;
+    refreshIntervalField.max = Number.MAX_SAFE_INTEGER;
+    refreshIntervalField.placeholder = this.defaults["Refresh interval"];
+    refreshIntervalField.value = this.config["Refresh interval"];
+    refreshIntervalLabel.appendChild(refreshIntervalField);
+
+    let activeRefreshLabel = form.appendChild(document.createElement("label"));
+    activeRefreshLabel.id = "card-watcher-active-refresh";
+    let activeRefreshTitle = activeRefreshLabel.appendChild(document.createElement("span"));
+    activeRefreshTitle.textContent = "Refresh while active:";
+    activeRefreshTitle.style.cursor = "help";
+    activeRefreshTitle.title = `By default, the page will only refresh when the tab is in the background (i.e., you have a different tab focused). This way you can still use the page normally if you want to. But if you use windows instead of tabs, so that your GoatBots tab is always visible, you should check this box.`;
+    let activeRefreshField = document.createElement("input");
+    activeRefreshField.type = "checkbox";
+    activeRefreshField.checked = !!this.config["Refresh while active"];
+    activeRefreshLabel.appendChild(activeRefreshField);
+
+    let TTSLabel = form.appendChild(document.createElement("label"));
+    TTSLabel.id = "card-watcher-use-tts";
+    let TTSTitle = TTSLabel.appendChild(document.createElement("span"));
+    TTSTitle.textContent = "Use text-to-speech:";
+    TTSTitle.style.cursor = "help";
+    TTSTitle.title = `By default, the alert will convert the names of the new cards to audible speech. You can disable text-to-speech by unchecking this box. In that case, it will use a fallback voice audio file.`;
+    let TTSField = document.createElement("input");
+    TTSField.type = "checkbox";
+    TTSField.checked = !!this.config["Use text-to-speech"];
+    TTSLabel.appendChild(TTSField);
+
+    let cardNumLabel = form.appendChild(document.createElement("label"));
+    cardNumLabel.id = "card-watcher-speak-card-numbers";
+    let cardNumTitle = cardNumLabel.appendChild(document.createElement("span"));
+    cardNumTitle.textContent = "Speak card numbers and tags:";
+    cardNumTitle.style.cursor = "help";
+    cardNumTitle.title = `If you uncheck this box, card numbers and tags will be omitted from the text-to-speech alert. So for example, instead of saying "Plains #268" it would just say "Plains" with no number. As for tags, instead of saying "Ultimate Masters #Full Art" it would just say "Plains" with no tag. If you check this box, it will just speak the card names exactly as they are.`;
+    let cardNumField = document.createElement("input");
+    cardNumField.type = "checkbox";
+    cardNumField.checked = !!this.config["Speak card numbers and tags"];
+    cardNumLabel.appendChild(cardNumField);
+
+    let cardLimitLabel = form.appendChild(document.createElement("label"));
+    cardLimitLabel.id = "card-watcher-card-limit";
+    let cardLimitTitle = cardLimitLabel.appendChild(document.createElement("span"));
+    cardLimitTitle.textContent = "Limit number of card names to speak:";
+    cardLimitTitle.style.cursor = "help";
+    cardLimitTitle.title = `If there are many cards to add to the cart, saying all their names out loud might be very slow. And we wait for speech to finish before starting delivery, since starting delivery will stop the speech. So if it has to say 10 names, that could mean 20-30 seconds before we initiate delivery. And that means someone else might initiate delivery on one of the desired items first. So this optional setting allows you to put a cap on the number of names spoken. If you set this to 0, then there is no limit. Any positive integer will set a proper limit. I personally set this to 3.`;
+    let cardLimitField = document.createElement("input");
+    cardLimitField.type = "number";
+    cardLimitField.required = true;
+    cardLimitField.min = 0;
+    cardLimitField.max = 100;
+    cardLimitField.placeholder = this.defaults["Limit number of card names to speak"];
+    cardLimitField.value = this.config["Limit number of card names to speak"];
+    cardLimitLabel.appendChild(cardLimitField);
+
+    let speechRateLabel = form.appendChild(document.createElement("label"));
+    speechRateLabel.id = "card-watcher-speech-rate";
+    let speechRateTitle = speechRateLabel.appendChild(document.createElement("span"));
+    speechRateTitle.textContent = "Text-to-speech rate:";
+    speechRateTitle.style.cursor = "help";
+    speechRateTitle.title = `How fast should the speech play? The value can range between 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the current platform or voice, which should correspond to a normal speaking rate. Other values act as a percentage relative to this, so for example 2 is twice as fast, 0.5 is half as fast, etc. I prefer 1.1 since the default voice on my computer (Windows 10) is kinda slow. Also, the script doesn't navigate to the delivery page until the voice alert has finished. So, a slower voice rate might mean a longer delay in starting delivery.`;
+    let speechRateField = document.createElement("input");
+    speechRateField.type = "number";
+    speechRateField.required = true;
+    speechRateField.step = "any";
+    speechRateField.min = 0.1;
+    speechRateField.max = 10;
+    speechRateField.placeholder = 1;
+    speechRateField.value = this.config["Text-to-speech rate"];
+    speechRateLabel.appendChild(speechRateField);
+
+    // Debug log level
+    let logLevelLabel = form.appendChild(document.createElement("label"));
+    logLevelLabel.id = "card-watcher-log-level";
+    let logLevelTitle = logLevelLabel.appendChild(document.createElement("span"));
+    logLevelTitle.textContent = "Debug log level:";
+    logLevelTitle.style.cursor = "help";
+    logLevelTitle.title = `An integer between 0 and 4. At the default level 0, we won't log anything to the console except for errors. At level 1, major debug messages will be logged. At level 2, less significant messages. And so on. The max value 4 will log everything. If you need my help troubleshooting something, set this to 4, try to reproduce the bug, and then copy the contents of your console and send it to me.`;
+    let logLevelField = document.createElement("input");
+    logLevelField.type = "number";
+    logLevelField.required = true;
+    logLevelField.step = 1;
+    logLevelField.min = 0;
+    logLevelField.max = 4;
+    logLevelField.placeholder = this.defaults["Debug log level"];
+    logLevelField.value = this.config["Debug log level"];
+    logLevelLabel.appendChild(logLevelField);
+
+    let buttonBox = form.appendChild(document.createElement("div"));
+    buttonBox.className = "button-box";
+
+    let saveBtn = buttonBox.appendChild(document.createElement("button"));
+    saveBtn.setAttribute("mode", "advanced-save");
+    saveBtn.textContent = "Save";
+
+    let cancelBtn = buttonBox.appendChild(document.createElement("button"));
+    cancelBtn.setAttribute("mode", "advanced-cancel");
+    cancelBtn.textContent = "Cancel";
+
+    // Main form submission handler.
+    form.onsubmit = e => {
+      e.preventDefault();
+      this.log(
+        2,
+        "info",
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
+      switch (e.submitter) {
+        case saveBtn: {
+          // Check that the user's inputs are all valid, and if not, dispatch a
+          // notification to the user through generic web API.
+          if (!form.checkValidity()) {
+            this.log(3, "warn", "GoatBots Card Watcher: invalid input");
+            form.reportValidity();
+            return;
+          }
+          // Save the current values.
+          GM_setValue("Refresh interval", Number(refreshIntervalField.value.trim()));
+          GM_setValue("Refresh while active", activeRefreshField.checked);
+          GM_setValue("Use text-to-speech", TTSField.checked);
+          GM_setValue("Speak card numbers and tags", cardNumField.checked);
+          GM_setValue("Limit number of card names to speak", Number(cardLimitField.value.trim()));
+          GM_setValue("Text-to-speech rate", Number(speechRateField.value.trim()));
+          GM_setValue("Debug log level", Number(logLevelField.value.trim()));
+          break;
+        }
+        case cancelBtn:
+        // fall through
+        default:
+          break;
+      }
+      // Exit the dialog without saving anything.
+      dialog.style.display = "none";
+      dialog.remove();
+      // Un-highlight the menu node when we leave the dialog.
+      menu?.firstElementChild?.classList.remove("active");
+    };
+    document.body.appendChild(dialog);
+    // Highlight the menu node.
+    menu?.firstElementChild?.classList.add("active");
+    // Make sure the end of the path is selected so we can easily add the +
+    // character to the end of the path.
+    refreshIntervalField.focus();
+    refreshIntervalField.scrollTo({ left: refreshIntervalField.scrollWidth });
   }
 
   // Delete the current page from the watchlist.
@@ -768,29 +970,32 @@ class CardWatcher {
     });
 
     let items = [];
-    for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
+    // for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
+    let submenuList = submenu.firstElementChild;
+    for (let i = 0; i < 5; i++) {
+      let li = submenuList.children[i] ?? submenuList.children[i - 1].cloneNode(true);
+      items.push(li.firstElementChild);
+    }
+
     if (document.querySelector("#main .price-list")) {
-      let label0 = handling ? "Edit page's card list" : "Add page to watchlist";
+      let label0 = handling ? "Edit Cards List" : "Add Page to Watchlist";
       items[0].setAttribute("aria-label", label0);
       items[0].textContent = label0;
       items[0].setAttribute("href", "#cardlist");
       items[0].setAttribute("onclick", "return false");
-      items[0].addEventListener("click", () => this.editCardList());
+      items[0].addEventListener("click", () => this.editCardListDialog());
+    } else items[0].parentElement.remove();
 
-      if (handling) {
-        let label1 = "Remove page from watchlist";
-        items[1].setAttribute("aria-label", label1);
-        items[1].textContent = label1;
-        items[1].setAttribute("href", "#remove");
-        items[1].setAttribute("onclick", "return false");
-        items[1].addEventListener("click", () => this.removeFromWatchlist());
-      } else items[1].parentElement.remove();
-    } else {
-      items[0].parentElement.remove();
-      items[1].parentElement.remove();
-    }
+    if (handling) {
+      let label1 = "Remove Page from Watchlist";
+      items[1].setAttribute("aria-label", label1);
+      items[1].textContent = label1;
+      items[1].setAttribute("href", "#remove");
+      items[1].setAttribute("onclick", "return false");
+      items[1].addEventListener("click", () => this.removeFromWatchlist());
+    } else items[1].parentElement.remove();
 
-    let label2 = this.config["Pause watching"] ? "Resume watching" : "Pause watching";
+    let label2 = this.config["Pause watching"] ? "Resume Watching" : "Pause Watching";
     items[2].setAttribute("aria-label", label2);
     items[2].textContent = label2;
     items[2].setAttribute("href", "#pause");
@@ -800,8 +1005,8 @@ class CardWatcher {
     );
 
     let label3 = this.config["Automatically start delivery"]
-      ? "Disable automatic delivery"
-      : "Enable automatic delivery";
+      ? "Disable Automatic Delivery"
+      : "Enable Automatic Delivery";
     items[3].setAttribute("aria-label", label3);
     items[3].textContent = label3;
     items[3].setAttribute("href", "#autostart");
@@ -810,8 +1015,15 @@ class CardWatcher {
       GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
     );
 
+    let label4 = "Advanced Settings";
+    items[4].setAttribute("aria-label", label4);
+    items[4].textContent = label4;
+    items[4].setAttribute("href", "#advancedsettings");
+    items[4].setAttribute("onclick", "return false");
+    items[4].addEventListener("click", () => this.advancedDialog());
+
     // Remove all the other items from the cloned menu.
-    items.slice(4).forEach(item => item.parentElement.remove());
+    items.slice(5).forEach(item => item.parentElement?.remove());
 
     ul.children[3].after(menu);
   }
@@ -996,7 +1208,7 @@ class CardWatcher {
 .price-list > li.even[watching] > a {
   background: hsla(120, 100%, 80%, 0.22);
 }
-.card-watcher-frame {
+.card-watcher-dialog {
   display: block;
   position: fixed;
   z-index: 2147483646;
@@ -1011,7 +1223,7 @@ class CardWatcher {
   background-attachment: local;
   -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
-  border: none;
+  border: 1px solid hsl(0, 0%, 33.3%);
   color: hsla(0, 0%, 97%, 0.95);
   max-width: -webkit-min-content;
   max-width: -moz-min-content;
@@ -1023,54 +1235,67 @@ class CardWatcher {
   font-size: 0.9em;
   transition: 0.2s ease-in-out opacity;
 }
-.card-watcher-frame form {
+.card-watcher-dialog form {
   display: flex;
   flex-flow: column nowrap;
   row-gap: 0.8em;
 }
-.card-watcher-frame :is(label, span, p, h3) {
+.card-watcher-dialog :is(label, span, p, h3) {
   cursor: default;
   user-select: none;
   white-space: nowrap;
 }
-.card-watcher-frame h3 {
+.card-watcher-dialog h3 {
   margin-block: 0 0.4em;
   text-align: center;
 }
-.card-watcher-frame p {
+.card-watcher-dialog p {
   margin-block: 0;
 }
-.card-watcher-frame span {
+.card-watcher-dialog span {
   margin-inline-end: 0.4em;
 }
-.card-watcher-frame input {
+.card-watcher-dialog input:is([type="text"], [type="number"]) {
   width: 100%;
   padding: 0.5em;
   flex-grow: 1;
 }
-.card-watcher-frame textarea {
+.card-watcher-dialog textarea {
   min-width: 100%;
   height: 256px;
   padding: 0.5em;
   flex-grow: 1;
 }
-.card-watcher-frame :is(input, textarea)::placeholder {
+.card-watcher-dialog :is(input, textarea)::placeholder {
 	opacity: 0.54;
 }
-.card-watcher-frame #card-watcher-path {
+.card-watcher-dialog label {
   width: 100%;
   display: flex;
   align-items: center;
   column-gap: 0.6em;
   flex-flow: row nowrap;
 }
-.card-watcher-frame #card-watcher-cards-list {
+.card-watcher-dialog #card-watcher-cards-list {
   width: 100%;
   display: flex;
   row-gap: 0.4em;
   flex-flow: column nowrap;
+  align-items: revert;
 }
-.card-watcher-frame .button-box {
+.card-watcher-dialog input[type="checkbox"] {
+  width: 0.5em;
+  height: 0.5em;
+  box-sizing: content-box;
+  padding: 0.5em;
+}
+.card-watcher-dialog input[type="checkbox"]:checked {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+.card-watcher-dialog .button-box {
   width: 100%;
   display: flex;
   align-items: center;
@@ -1078,15 +1303,33 @@ class CardWatcher {
   min-width: 250px;
   gap: 0.6em;
 }
-.card-watcher-frame .button-box button {
+.card-watcher-dialog .button-box button {
   white-space: nowrap;
   flex-grow: 1;
   flex-shrink: 1;
   flex-basis: 20%;
 }
-.card-watcher-frame .button-box button[disabled] {
+.card-watcher-dialog .button-box button[disabled] {
   pointer-events: none;
   opacity: 0.4;
+}
+.card-watcher-dialog #card-watcher-card-limit > span {
+  white-space: normal;
+}
+.card-watcher-dialog #card-watcher-card-limit > input {
+  width: auto;
+  min-width: 50px;
+}
+.card-watcher-dialog input[type="number"] {
+  -moz-appearance: textfield;
+}
+.card-watcher-dialog input[type="number"]::-webkit-inner-spin-button,
+.card-watcher-dialog input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.card-watcher-menu > a {
+  white-space: nowrap;
 }
 #menu-wrap {
   max-width: 95em !important;
@@ -1096,9 +1339,6 @@ class CardWatcher {
   #menu-wrap {
     max-width: 82.5rem !important;
   }
-}
-.card-watcher-menu > a {
-  white-space: nowrap;
 }`;
 
   audio = {
