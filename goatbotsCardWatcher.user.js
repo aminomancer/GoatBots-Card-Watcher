@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.1.4
+// @version        1.1.5
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -521,6 +521,9 @@ class CardWatcher {
     pathTitle.style.cursor = "help";
     pathTitle.title = `The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.`;
     let pathField = document.createElement("input");
+    pathField.required = true;
+    pathField.minLength = 2;
+    pathField.pattern = "^/.*";
     pathField.placeholder = path;
     pathField.value = path;
     pathLabel.appendChild(pathField);
@@ -534,6 +537,7 @@ class CardWatcher {
     let exampleCard2 = exampleCard1?.nextElementSibling;
     let exampleCardText1 = exampleCard1?.querySelector(".name")?.textContent || "Example Card #1";
     let exampleCardText2 = exampleCard2?.querySelector(".name")?.textContent || "Example Card #2";
+    cardsField.required = true;
     cardsField.spellcheck = false;
     cardsField.placeholder = `Add card names exactly as they appear in the page, separated by a line break:\n\n${exampleCardText1}\n${exampleCardText2}`;
     if (cards) cardsField.value = cards.join(`\n`);
@@ -606,43 +610,26 @@ class CardWatcher {
         case saveBtn: {
           // Save the current values.
           let path = pathField.value.trim();
-          let cards = cardsField.value.split(/\n+\s*/).filter(val => !!val);
-          // Check that the path input is valid, and if not, dispatch a
+          let cardsValue = cardsField.value;
+          let cards = cardsValue.split(/\n+\s*/).filter(val => !!val.trim());
+          // Check that the inputs are valid, and if not, dispatch a
           // notification to the user through generic web API. We could set
           // these values on the path field by default, but then the path field
           // would need to be valid even when clicking the other buttons. We
           // only care if it's valid when the user is clicking the save button.
           // And I don't want to use click handlers because there are other ways
           // to submit the form, like hitting Enter in an input field.
-          pathField.required = true;
-          pathField.minLength = 2;
-          pathField.pattern = "^/.*";
           pathField.title = "/" + path;
-          let resetPathField = () => {
-            pathField.removeAttribute("required");
-            pathField.removeAttribute("minlength");
-            pathField.removeAttribute("pattern");
-            pathField.removeAttribute("title");
-          };
+          if (!cards.length) cardsField.value = "";
           if (!form.checkValidity()) {
-            this.log(3, "warn", "GoatBots Card Watcher: invalid path input");
+            this.log(3, "warn", "GoatBots Card Watcher: invalid input");
             form.reportValidity();
-            resetPathField();
+            pathField.removeAttribute("title");
+            cardsField.value = cardsValue;
             return;
           }
-          resetPathField();
-          // Check that the cards field is not effectively empty.
-          if (!cards.length) {
-            cardsField.value = "";
-            cardsField.required = true;
-            if (!form.checkValidity()) {
-              this.log(3, "warn", "GoatBots Card Watcher: invalid cards input");
-              form.reportValidity();
-              cardsField.required = false;
-              return;
-            }
-            cardsField.required = false;
-          }
+          pathField.removeAttribute("title");
+          cardsField.value = cardsValue;
           if (page) {
             // If there was no change to the watchlist, don't bother with
             // updating user settings or reloading the page.
