@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.2.0
+// @version        1.2.1
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -117,11 +117,11 @@ class CardWatcher {
    * By default, a level 0 message will be logged in the console, but a level 1
    * message will not. For debugging purposes you can increase your log level
    * setting to 4. That will capture all messages.
-   * @param {Number} level the message's log level.
-   * @param {String} mode the console method ("log" or "error" for example).
+   * @param {Number} [level] the message's log level.
+   * @param {String} [mode] the console method ("log" or "error" for example).
    * @param {any} message anything worth logging.
    */
-  log(level, mode = "log", ...message) {
+  log({ level = 2, mode = "info" } = {}, ...message) {
     if ((this.config["Debug log level"] ?? 0) >= level) console[mode](...message);
   }
 
@@ -130,13 +130,11 @@ class CardWatcher {
     for (const [key, value] of Object.entries(this.defaults)) {
       let saved = GM_getValue(key);
       if (saved === undefined) {
-        this.log(4, "info", `GoatBots Card Watcher: writing setting ${key} :>> `, value);
+        this.log({ level: 4 }, `GoatBots Card Watcher: writing setting ${key} :>> `, value);
         GM_setValue(key, value);
         this.config[key] = value;
       } else this.config[key] = saved;
-      GM_addValueChangeListener(key, (id, oldValue, newValue, remote) =>
-        this.onValueChange(id, oldValue, newValue, remote)
-      );
+      GM_addValueChangeListener(key, (...args) => this.onValueChange(...args));
     }
     // Add menu commands for auto-start delivery and pause watching.
     GM_registerMenuCommand(
@@ -164,7 +162,7 @@ class CardWatcher {
     if (location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
       if (history.state && this.config["Automatically start delivery"]) {
-        this.log(1, "info", "GoatBots Card Watcher: Automatically started delivery");
+        this.log({ level: 1 }, "GoatBots Card Watcher: Automatically started delivery");
         let { autostart, previousURL } = history.state;
         // We use the history to store state between page loads. That way we can
         // avoid messing with the normal usage of GoatBots. When we auto-start
@@ -211,7 +209,7 @@ class CardWatcher {
     );
     if (!page) return;
     GM_registerMenuCommand("Remove Page from Watchlist", () => this.removeFromWatchlist());
-    this.log(2, "info", "GoatBots Card Watcher: watching the page");
+    this.log({}, "GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
     // If the page's cards list is empty for some reason, do nothing.
@@ -285,7 +283,7 @@ class CardWatcher {
 
   // Invoked when the page finishes loading. Scan for new cards.
   handleEvent() {
-    this.log(3, "info", "GoatBots Card Watcher: loaded");
+    this.log({ level: 3 }, "GoatBots Card Watcher: loaded");
     let cards = [];
     let rows = [];
     // Scan every card in the page's price list.
@@ -296,7 +294,7 @@ class CardWatcher {
         row.setAttribute("watching", "true");
         // Only handle the card if it's in stock.
         if (row.querySelector(".stock")?.classList.contains("out")) continue;
-        this.log(4, "info", `GoatBots Card Watcher: ${name} in stock`);
+        this.log({ level: 4 }, `GoatBots Card Watcher: ${name} in stock`);
         cards.push(name);
         // If the card isn't already in our cart, add it.
         if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
@@ -332,8 +330,8 @@ class CardWatcher {
             return;
           }
         } else {
-          this.log(4, "info", "GoatBots Card Watcher: delivery active :>> ", data.text);
-          this.log(4, "info", "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+          this.log({ level: 4 }, "GoatBots Card Watcher: delivery active :>> ", data.text);
+          this.log({ level: 4 }, "GoatBots Card Watcher: delivery hash :>> ", data.hash);
         }
         this.countdown();
       },
@@ -343,7 +341,7 @@ class CardWatcher {
 
   // Start the reload timer.
   countdown() {
-    this.log(3, "info", "GoatBots Card Watcher: waiting to reload");
+    this.log({ level: 3 }, "GoatBots Card Watcher: waiting to reload");
     window.clearTimeout(this.timer);
     this.timer = window.setTimeout(() => {
       // Check delivery status. We don't reload if a delivery is in progress.
@@ -365,8 +363,8 @@ class CardWatcher {
               } else location.reload();
             }
           } else {
-            this.log(4, "info", "GoatBots Card Watcher: delivery active :>> ", data.text);
-            this.log(4, "info", "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+            this.log({ level: 4 }, "GoatBots Card Watcher: delivery active :>> ", data.text);
+            this.log({ level: 4 }, "GoatBots Card Watcher: delivery hash :>> ", data.hash);
             this.countdown();
           }
         },
@@ -388,8 +386,7 @@ class CardWatcher {
     // If the current row is valid, add it to cart.
     if (row !== undefined) {
       this.log(
-        3,
-        "info",
+        { level: 3 },
         "GoatBots Card Watcher: adding " +
           row.querySelector(".name")?.innerText?.trim() +
           " to cart"
@@ -439,15 +436,14 @@ class CardWatcher {
             location.href = "/delivery";
           },
         });
-        this.log(1, "info", "GoatBots Card Watcher: starting delivery");
+        this.log({ level: 1 }, "GoatBots Card Watcher: starting delivery");
       } else {
         // Just go to the delivery page without starting delivery.
         location.href = "/delivery";
       }
     } else {
       this.log(
-        2,
-        "info",
+        {},
         "GoatBots Card Watcher: waiting for " + this.finishedSpeaking
           ? "items to be added to cart"
           : "speech/audio to finish"
@@ -461,7 +457,7 @@ class CardWatcher {
    */
   playSynthAlert(words) {
     if (words) {
-      this.log(2, "info", "GoatBots Card Watcher: speech synth startup");
+      this.log({}, "GoatBots Card Watcher: speech synth startup");
       let speech = new SpeechSynthesisUtterance();
       this.voices = window.speechSynthesis.getVoices();
       speech.text = words;
@@ -476,16 +472,19 @@ class CardWatcher {
             this.tryDelivery();
             speech.onend = null;
           };
-          this.log(3, "info", "GoatBots Card Watcher: speaking words :>> ", words);
+          this.log({ level: 3 }, "GoatBots Card Watcher: speaking words :>> ", words);
           this.alertAudio.play();
           window.speechSynthesis.speak(speech);
         } else {
-          this.log(2, "info", "GoatBots Card Watcher: speech synth busy");
+          this.log({}, "GoatBots Card Watcher: speech synth busy");
         }
         return;
       }
     } else {
-      this.log(1, "error", "GoatBots Card Watcher: speech synth sent invalid card names");
+      this.log(
+        { level: 1, mode: "error" },
+        "GoatBots Card Watcher: speech synth sent invalid card names"
+      );
     }
     this.playVoiceAlert();
   }
@@ -498,7 +497,7 @@ class CardWatcher {
       this.tryDelivery();
       this.voiceAudio.onended = null;
     };
-    this.log(2, "info", "GoatBots Card Watcher: playing audio");
+    this.log({}, "GoatBots Card Watcher: playing audio");
     this.alertAudio.play();
     this.voiceAudio.play();
   }
@@ -514,7 +513,7 @@ class CardWatcher {
    */
   onValueChange(id, oldValue, newValue, remote) {
     if (oldValue === newValue) return;
-    this.log(4, "info", "GoatBots Card Watcher: setting updated — " + id + " :>> ", newValue);
+    this.log({ level: 4 }, "GoatBots Card Watcher: setting updated — " + id + " :>> ", newValue);
     this.config[id] = newValue;
     let menu = document.getElementById("card-watcher-menu");
     switch (id) {
@@ -524,7 +523,7 @@ class CardWatcher {
           let item = menu.querySelector("a[href='#pause']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
+        } else this.log({ level: 1, mode: "warn" }, "GoatBots Card Watcher: menu missing");
         if (!remote && !newValue && oldValue && this.cards?.length) location.reload();
         GM_unregisterMenuCommand(oldValue ? "Resume Watching" : "Pause Watching");
         GM_registerMenuCommand(newValue ? "Resume Watching" : "Pause Watching", () => {
@@ -539,7 +538,7 @@ class CardWatcher {
           let item = menu.querySelector("a[href='#autostart']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        } else this.log(1, "warn", "GoatBots Card Watcher: menu missing");
+        } else this.log({ level: 1, mode: "warn" }, "GoatBots Card Watcher: menu missing");
         GM_unregisterMenuCommand(
           oldValue ? "Disable Automatic Delivery" : "Enable Automatic Delivery"
         );
@@ -556,7 +555,7 @@ class CardWatcher {
   // Open the card list editor dialog.
   editCardListDialog() {
     if (document.querySelector(".card-watcher-dialog")) return;
-    this.log(2, "info", "GoatBots Card Watcher: opening card list editor");
+    this.log({}, "GoatBots Card Watcher: opening card list editor");
     let page = this.config.Watchlist.find(page => page.path === location.pathname);
     let { path, cards } = page ?? { path: location.pathname };
 
@@ -652,7 +651,7 @@ class CardWatcher {
         e.stopImmediatePropagation();
         e.stopPropagation();
         e.preventDefault();
-        this.log(3, "info", "GoatBots Card Watcher: card row selected by click :>> ", row);
+        this.log({ level: 3 }, "GoatBots Card Watcher: card row selected by click :>> ", row);
         if (row.hasAttribute("watching")) row.removeAttribute("watching");
         else row.setAttribute("watching", "true");
       }
@@ -661,12 +660,7 @@ class CardWatcher {
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        2,
-        "info",
-        "GoatBots Card Watcher: form submission :>> ",
-        e.submitter.getAttribute("mode")
-      );
+      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
       switch (e.submitter) {
         case saveBtn: {
           // Save the current values.
@@ -683,7 +677,7 @@ class CardWatcher {
           pathField.title = "/" + path;
           if (!cards.length) cardsField.value = "";
           if (!form.checkValidity()) {
-            this.log(3, "warn", "GoatBots Card Watcher: invalid input");
+            this.log({ level: 3, mode: "warn" }, "GoatBots Card Watcher: invalid input");
             form.reportValidity();
             pathField.removeAttribute("title");
             cardsField.value = cardsValue;
@@ -741,12 +735,7 @@ class CardWatcher {
     // Click-to-select form submission handler.
     clickSelectForm.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        2,
-        "info",
-        "GoatBots Card Watcher: form submission :>> ",
-        e.submitter.getAttribute("mode")
-      );
+      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
       switch (e.submitter) {
         case clickSelectConfirmBtn: {
           // Add the selected cards to the card list field
@@ -790,7 +779,7 @@ class CardWatcher {
   // Open the advanced settings dialog.
   advancedDialog() {
     if (document.querySelector(".card-watcher-dialog")) return;
-    this.log(2, "info", "GoatBots Card Watcher: opening advanced settings dialog");
+    this.log({}, "GoatBots Card Watcher: opening advanced settings dialog");
 
     let dialog = document.createElement("dialog");
     dialog.className = "card-watcher-dialog";
@@ -918,18 +907,13 @@ class CardWatcher {
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        2,
-        "info",
-        "GoatBots Card Watcher: form submission :>> ",
-        e.submitter.getAttribute("mode")
-      );
+      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
       switch (e.submitter) {
         case saveBtn: {
           // Check that the user's inputs are all valid, and if not, dispatch a
           // notification to the user through generic web API.
           if (!form.checkValidity()) {
-            this.log(3, "warn", "GoatBots Card Watcher: invalid input");
+            this.log({ level: 3, mode: "warn" }, "GoatBots Card Watcher: invalid input");
             form.reportValidity();
             return;
           }
@@ -965,12 +949,12 @@ class CardWatcher {
 
   // Delete the current page from the watchlist.
   removeFromWatchlist() {
-    this.log(3, "info", "GoatBots Card Watcher: remove from watchlist?");
+    this.log({ level: 3 }, "GoatBots Card Watcher: remove from watchlist?");
     let idx = this.config.Watchlist.findIndex(page => page.path === location.pathname);
     if (idx !== -1) {
       // Ask the user to confirm so they don't lose data.
       if (confirm(`Are you sure you want to remove ${location.pathname} from the watchlist?`)) {
-        this.log(3, "info", "GoatBots Card Watcher: yes, remove from watchlist");
+        this.log({ level: 3 }, "GoatBots Card Watcher: yes, remove from watchlist");
         this.config.Watchlist.splice(idx, 1);
         GM_setValue("Watchlist", this.config.Watchlist);
         location.reload();
@@ -985,7 +969,7 @@ class CardWatcher {
   createMenu(handling = false) {
     let nav = document.querySelector("nav");
     if (!nav || nav.querySelector("ul > li#card-watcher-menu")) return;
-    this.log(4, "info", "GoatBots Card Watcher: creating the DOM menu");
+    this.log({ level: 4 }, "GoatBots Card Watcher: creating the DOM menu");
     let ul = nav.querySelector("ul");
     let menu = ul.children[3].cloneNode(true);
     menu.id = "card-watcher-menu";
@@ -1002,11 +986,7 @@ class CardWatcher {
       if (e.code === "Enter") {
         let item = document.getElementById("card-watcher-menu").querySelector("li.selected");
         if (item) {
-          this.log(
-            2,
-            "info",
-            "GoatBots Card Watcher: overriding Enter key behavior for our menu items"
-          );
+          this.log({}, "GoatBots Card Watcher: overriding Enter key behavior for our menu items");
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
