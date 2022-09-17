@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.2.1
+// @version        1.2.2
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -721,7 +721,13 @@ class CardWatcher {
           return;
         }
         case cancelBtn:
-        // fall through
+          for (let row of document.querySelector("#main .price-list")?.children) {
+            if (row.className === "header") continue;
+            let name = row.querySelector(".name")?.innerText?.trim();
+            if (name && this.cards?.includes(name)) row.setAttribute("watching", "true");
+            else row.removeAttribute("watching");
+          }
+          break;
         default:
           break;
       }
