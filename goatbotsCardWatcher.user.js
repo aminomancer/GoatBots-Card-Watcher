@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        1.2.2
+// @version        2.0.0
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
 // @downloadURL    https://cdn.jsdelivr.net/gh/aminomancer/GoatBots-Card-Watcher@latest/goatbotsCardWatcher.user.js
 // @namespace      https://github.com/aminomancer
 // @match          https://www.goatbots.com/*
-// @description    Automatically refresh a GoatBots page on a set timer, check if any of the cards specified by name in the settings are in stock, and if so, add them to cart, play an audio alert, and (optionally) start delivery.
+// @description    Configure a list of cards to watch GoatBots until in stock. Pick a GoatBots page to watch, and click the cards you want to watch for. Then leave the script to automatically refresh that page on a set timer, check if any of the cards are in stock, and if so, add them to cart, play an audio alert, and (optionally) start delivery.
 
 // The alert will use text-to-speech to audibly speak the names of the new cards
 // if text-to-speech is available on your computer. Otherwise it will just play
@@ -34,25 +34,26 @@
 // Then, the script will only activate when you explicitly navigate to the +
 // version of the URL, which you can bookmark.
 
-// Then proceed to the big text area — the cards list. You can manually enter in
-// the card names you want to add, as they appear on the page, separated by line
-// breaks. Or you can click the "Select by clicking" button at the bottom. This
-// will allow you to add cards to the watchlist just by clicking them. Clicking
-// a card row will toggle it on or off. Then click the "Confirm" button to
-// return to the watchlist editor — the cards list will now be filled with the
-// cards you selected. Then, click the "Save" button and it will store this in
-// your script settings. They will persist even after updating the script.
+// Then proceed to the big text area — the cards list. Technically, you can
+// manually input the cards you want to add, in JSON format. But because there
+// are many versions of some cards, the cards are uniquely identified by a
+// random ID that is not easily visible on the page. So it's recommended to
+// click the "Select by clicking" button at the bottom. This will allow you to
+// add cards to the watchlist just by clicking them. Clicking a card row will
+// toggle it on or off. Then click the "Confirm" button to return to the
+// watchlist editor — the cards list will now be filled with the cards you
+// selected. Then, click the "Save" button and it will store this in your script
+// settings. They will persist even after updating the script.
 
-// Names must match the names on GoatBots exactly. By default, this script will
-// refresh the page every 10 seconds, provided the tab the page is loaded in is
-// not active. It basically pauses refreshing while the tab is active, so that
-// you can still use the page as normal. That way, it will only scan in the
-// background, and alert you when it finds something. However, this pausing
-// behavior can be disabled by setting "Refresh while active" to true in the
-// advanced settings, which can be accessed through the menu. You can set the
-// values of any of the settings in this interface, except for the watchlist. If
-// you need to make bulk changes to the watchlist, go to the script page in your
-// script manager and click on the "Values" tab.
+// By default, this script will refresh the page every 10 seconds, provided the
+// tab the page is loaded in is not active. It basically pauses refreshing while
+// the tab is active, so that you can still use the page as normal. That way, it
+// will only scan in the background, and alert you when it finds something.
+// However, this pausing behavior can be disabled by setting "Refresh while
+// active" to true in the advanced settings, which can be accessed through the
+// menu. You can set the values of any of the settings in this interface, except
+// for the watchlist. If you need to make bulk changes to the watchlist, go to
+// the script page in your script manager and click on the "Values" tab.
 
 // The "Automatically start delivery" setting lets you begin delivery as soon as
 // new cards are detected. This increases the chances that you'll get the cards,
@@ -96,9 +97,13 @@
 // @icon           data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250"><path d="M209.82 4.76c6.89-2.17 14.1-3.64 21.35-3.39-3.84 5.25-10.98 5.94-15.65 10.18-3.46 3.21-6.81 6.64-9.42 10.59-5.7 9.12-8.51 19.69-14.2 28.81-5.78 9.3-13.58 17.08-20.24 25.72-1.45 1.98-3.04 3.99-3.69 6.4-.34 3.05.6 6.05.74 9.08l.05 2.13c-4.95-4.04-9.21-8.86-14.4-12.62-2.88-2.07-5.77-4.39-7.25-7.71-1.9-3.22-3.03-7.96-7.28-8.75-7.22-1.55-14.52.8-21.8.47-5.74.22-12.08-.92-17.31 2-3.97 3.64-4.81 9.54-8.84 13.18-4.53 4.17-9.48 7.88-14.38 11.6l-.4-3.44c-.32-3.18-1.1-6.41-3.14-8.96-7.28-9.66-17.82-16.31-25.03-26.03-4.49-7.25-4.69-16.16-8.06-23.89-3.43-8.09-7.86-16.86-16.25-20.71-3.78-2.02-8.23-3.37-10.79-7.05 7.25-.25 14.46 1.22 21.35 3.39 4.92 1.55 9.31 4.48 12.81 8.24 7.79 8.3 14.09 17.87 21.73 26.29 5.96 5.31 12.47 10.13 19.88 13.24 8.95 4.94 19.27 6.73 29.41 6.51 7.76-.21 15.79.74 23.3-1.71 7.83-2.72 13.95-8.6 19.6-14.44 6.63-6.79 15.51-11.01 21.55-18.43 2.99-3.67 6.31-7.06 10-10.04 5.05-4.09 10-8.71 16.36-10.66zM114.1 113.84c3.61.62 6.75 2.57 9.89 4.33 3.14-1.78 6.28-3.72 9.89-4.33 2.06 6.59 5.3 13.45 3.39 20.49-2.87 4.34-7.31 7.39-11.21 10.75-2.15 2.25-4.57-.47-6.31-1.81-3.09-2.86-6.82-5.26-8.95-8.97-2.1-7.03 1.49-13.81 3.3-20.46zm-58.06 2.13c6.37 2.83 11.79 7.51 16.26 12.8 1.35 1.43 1.52 3.44 1.82 5.29-9.66.14-18.59-8.24-18.08-18.09zm128.03 5.08c2.71-1.94 5.49-4.35 9.03-4.32.01 9.08-8.75 16.15-17.31 17.1-1.4-5.95 4.39-9.51 8.28-12.78zm-71.88 31.12c5.66-1.78 11.7-2.26 17.6-1.7 6.43.65 12.07 4.59 16.22 9.36-7.22 2.36-14.22 6.39-22.05 5.95-6.67.14-12.78-3.25-18.1-6.95 1.17-2.88 3.21-5.73 6.33-6.66z" fill="%23735141"/><path d="M118.03 65.67c7.28.33 14.58-2.02 21.8-.47 4.25.79 5.38 5.53 7.28 8.75 1.48 3.32 4.37 5.64 7.25 7.71 5.19 3.76 9.45 8.58 14.4 12.62 4.83 4.66 12.1 4.35 18.3 3.78 8.88-.73 17.18-5.71 26.26-4.12-1.24 1.55-2.55 3.07-4.17 4.23-8.33 6.01-18.2 9.44-26.49 15.52-8.35 6.22-12.61 16.36-14.92 26.22-1.34 5.2-1.8 11.08-5.69 15.16-5.87 6.19-13.54 10.4-19.08 16.94-2.96 3.37-6.09 7.07-10.6 8.29-4.66 1.19-9.59 1.42-14.34.76-4.55-.71-6.87-5.21-9.85-8.19-6.43-7.67-15.54-12.48-21.92-20.16-6.32-8.02-4.82-19.25-10.33-27.66-5.93-9.38-15.17-16.08-24.91-21.1-5.79-3.07-12.4-5.47-16.36-11.01 6.19-.98 12.22 1.13 18.37 1.33 4.98.23 9.96.18 14.94.11 3.24-.12 6.7-.12 9.53-1.93 4.9-3.72 9.85-7.43 14.38-11.6 4.03-3.64 4.87-9.54 8.84-13.18 5.23-2.92 11.57-1.78 17.31-2m34.74 31.09c-4.84 5.32-12.49 8.51-14.11 16.21 2.22 2.38 5.01 4.66 8.42 4.77 4.72.14 9.24-1.97 13.04-4.61 4.45-3.14 5.68-9.01 5.27-14.14-.33-3.91-4.29-7.47-8.3-6.25-1.63 1.12-2.94 2.63-4.32 4.02m-74.95 4.16c2.79 8.98 11.12 15.94 20.23 17.78 4.61 1.2 7.32-3.37 9.4-6.63-2.18-4.17-6.05-6.97-9.24-10.3-4.04-3.81-9.05-7.99-14.98-7.42-3.02.44-6.85 3.06-5.41 6.57m36.28 12.92c-1.81 6.65-5.4 13.43-3.3 20.46 2.13 3.71 5.86 6.11 8.95 8.97 1.74 1.34 4.16 4.06 6.31 1.81 3.9-3.36 8.34-6.41 11.21-10.75 1.91-7.04-1.33-13.9-3.39-20.49-3.61.61-6.75 2.55-9.89 4.33-3.14-1.76-6.28-3.71-9.89-4.33m-1.91 38.33c-3.12.93-5.16 3.78-6.33 6.66 5.32 3.7 11.43 7.09 18.1 6.95 7.83.44 14.83-3.59 22.05-5.95-4.15-4.77-9.79-8.71-16.22-9.36-5.9-.56-11.94-.08-17.6 1.7zm46.15 25.22c2.66-8.12 4.5-17.94 12.52-22.6.74 4.36.84 8.78 1.03 13.19.45 10.5 2.72 21.08 7.73 30.39 2.99 5.62 5.65 11.48 6.72 17.8l-49.1 28.43c-1.64-7.43-.74-15.06-.98-22.59.05-4.78-.52-9.8 1.41-14.32 4.77-11.51 17-18.17 20.67-30.3zm-78.08-20.56c7.52 8.48 10.21 19.98 16.93 29.01 5.08 7.16 13.12 11.63 17.93 19.01 3.45 5.37 3.63 11.96 3.76 18.13.04 7.38.13 14.79-.89 22.12-2.08.16-4.16.36-6.24.43l-41.04-23.32c-.03-9.13-.51-18.48 2.13-27.33 3.74-12.39 6.36-25.15 7.42-38.05z" fill="%23e4dfd1"/><path d="M208.39 88.39c10.26-2.56 20.49-5.45 31.02-6.69.53 6.12-3.34 11.21-7.53 15.18-5.77 5.58-11.14 11.74-18.05 15.97-4.04 2.75-8.7 4.45-12.65 7.34-5.22 4.37-6.75 11.63-11.85 16.13-3.53 3.34-8.33 4.89-11.9 8.16-1.31 4.33-.83 8.97-1.11 13.44.06 7.56-.61 15.18.24 22.7 2.74 11.04 11.96 19.31 14.21 30.53.77 2.74-2.67 3.78-4.43 5.02-1.07-6.32-3.73-12.18-6.72-17.8-5.01-9.31-7.28-19.89-7.73-30.39-.19-4.41-.29-8.83-1.03-13.19-8.02 4.66-9.86 14.48-12.52 22.6-3.67 12.13-15.9 18.79-20.67 30.3-1.93 4.52-1.36 9.54-1.41 14.32.24 7.53-.66 15.16.98 22.59-2.56 1.8-4.95 3.83-7.66 5.4h-12.26c-1.84-1.51-3.67-3.05-5.57-4.47 2.08-.07 4.16-.27 6.24-.43 1.02-7.33.93-14.74.89-22.12-.13-6.17-.31-12.76-3.76-18.13-4.81-7.38-12.85-11.85-17.93-19.01-6.72-9.03-9.41-20.53-16.93-29.01-1.06 12.9-3.68 25.66-7.42 38.05-2.64 8.85-2.16 18.2-2.13 27.33-3.2-1.63-6.82-3.13-8.74-6.36-.32-2.72.21-5.44.76-8.1 2.03-8.82 4.96-17.42 6.74-26.31 2.32-10.98 3.38-22.26 2.81-33.47-.27-1.35-.05-3.1-1.23-4.04-3.51-2.92-8.07-4.37-11.24-7.74-4.62-4.71-5.79-11.8-10.73-16.23-4.84-4.05-11.29-5.73-15.78-10.26-4.2-4.23-7.08-9.54-11-14.01-3.59-4.44-8.35-7.8-11.58-12.53 6.64-.16 13.27.74 19.68 2.42 6.81 1.74 13.5 4.25 20.59 4.58 8.7.36 17.54.76 26.11-1.15l.4 3.44c-2.83 1.81-6.29 1.81-9.53 1.93-4.98.07-9.96.12-14.94-.11-6.15-.2-12.18-2.31-18.37-1.33 3.96 5.54 10.57 7.94 16.36 11.01 9.74 5.02 18.98 11.72 24.91 21.1 5.51 8.41 4.01 19.64 10.33 27.66 6.38 7.68 15.49 12.49 21.92 20.16 2.98 2.98 5.3 7.48 9.85 8.19 4.75.66 9.68.43 14.34-.76 4.51-1.22 7.64-4.92 10.6-8.29 5.54-6.54 13.21-10.75 19.08-16.94 3.89-4.08 4.35-9.96 5.69-15.16 2.31-9.86 6.57-20 14.92-26.22 8.29-6.08 18.16-9.51 26.49-15.52 1.62-1.16 2.93-2.68 4.17-4.23-9.08-1.59-17.38 3.39-26.26 4.12-6.2.57-13.47.88-18.3-3.78l-.05-2.13c6.44.32 12.88 1.26 19.33.7 6.95-.59 13.61-2.79 20.35-4.46M56.04 115.97c-.51 9.85 8.42 18.23 18.08 18.09-.3-1.85-.47-3.86-1.82-5.29-4.47-5.29-9.89-9.97-16.26-12.8m128.03 5.08c-3.89 3.27-9.68 6.83-8.28 12.78 8.56-.95 17.32-8.02 17.31-17.1-3.54-.03-6.32 2.38-9.03 4.32zm-31.3-24.29c1.38-1.39 2.69-2.9 4.32-4.02 4.01-1.22 7.97 2.34 8.3 6.25.41 5.13-.82 11-5.27 14.14-3.8 2.64-8.32 4.75-13.04 4.61-3.41-.11-6.2-2.39-8.42-4.77 1.62-7.7 9.27-10.89 14.11-16.21zm-74.95 4.16c-1.44-3.51 2.39-6.13 5.41-6.57 5.93-.57 10.94 3.61 14.98 7.42 3.19 3.33 7.06 6.13 9.24 10.3-2.08 3.26-4.79 7.83-9.4 6.63-9.11-1.84-17.44-8.8-20.23-17.78z" fill="%230c0b09"/></svg>
 // ==/UserScript==
 
-const GMObj = "GM" in window && typeof GM === "object" && typeof GM.getValue === "function";
+const GMObj =
+  "GM" in window && typeof GM === "object" && typeof GM.getValue === "function";
 // check if the script handler is GM4, since if it is, we can't add a menu command
-const GM4 = GMObj && GM.info.scriptHandler === "Greasemonkey" && GM.info.version.split(".")[0] >= 4;
+const GM4 =
+  GMObj &&
+  GM.info.scriptHandler === "Greasemonkey" &&
+  GM.info.version.split(".")[0] >= 4;
 if (GM4) {
   GM_getValue = GM.getValue;
   GM_setValue = GM.setValue;
@@ -122,18 +127,37 @@ class CardWatcher {
    * @param {any} message anything worth logging.
    */
   log({ level = 2, mode = "info" } = {}, ...message) {
-    if ((this.config["Debug log level"] ?? 0) >= level) console[mode](...message);
+    if ((this.config["Debug log level"] ?? 0) >= level) {
+      console[mode](...message);
+    }
+  }
+
+  migrateSettings() {
+    // Check for old watchlist format { path: string, cards: string[] }[]
+    // New format is { path: string, cards: { id: string, name:string }[] }[]
+    // Just wipe it since we can't get the card ids from the old format.
+    if (typeof GM_getValue("Watchlist")[0]?.cards[0] === "string") {
+      GM_setValue("Watchlist", this.defaults.Watchlist);
+    }
   }
 
   constructor() {
+    // Maybe migrate old settings.
+    this.migrateSettings();
     // Get the user settings or set them if they aren't already set.
     for (const [key, value] of Object.entries(this.defaults)) {
       let saved = GM_getValue(key);
       if (saved === undefined) {
-        this.log({ level: 4 }, `GoatBots Card Watcher: writing setting ${key} :>> `, value);
+        this.log(
+          { level: 4 },
+          `GoatBots Card Watcher: writing setting ${key} :>> `,
+          value
+        );
         GM_setValue(key, value);
         this.config[key] = value;
-      } else this.config[key] = saved;
+      } else {
+        this.config[key] = saved;
+      }
       GM_addValueChangeListener(key, (...args) => this.onValueChange(...args));
     }
     // Add menu commands for auto-start delivery and pause watching.
@@ -142,27 +166,41 @@ class CardWatcher {
         ? "Disable Automatic Delivery"
         : "Enable Automatic Delivery",
       () =>
-        GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
+        GM_setValue(
+          "Automatically start delivery",
+          !this.config["Automatically start delivery"]
+        )
     );
     GM_registerMenuCommand(
       this.config["Pause watching"] ? "Resume Watching" : "Pause Watching",
       () => {
         GM_setValue("Pause watching", !this.config["Pause watching"]);
-        if (this.config["Pause watching"] && this.cards?.length) location.reload();
+        if (this.config["Pause watching"] && this.cards?.length) {
+          location.reload();
+        }
       }
     );
     GM_registerMenuCommand("Advanced Settings", () => this.advancedDialog());
     // Add styles to highlight watched cards.
     GM_addStyle(this.css);
     // Check if the current page is not in the watchlist.
-    let page = this.config.Watchlist.find(page => page.path === location.pathname);
+    let page = this.config.Watchlist.find(
+      page => page.path === location.pathname
+    );
     // Add a custom menu to the page DOM.
-    document.addEventListener("DOMContentLoaded", () => this.createMenu(!!page), { once: true });
+    document.addEventListener(
+      "DOMContentLoaded",
+      () => this.createMenu(!!page),
+      { once: true }
+    );
     // If we're on the delivery page...
     if (location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
       if (history.state && this.config["Automatically start delivery"]) {
-        this.log({ level: 1 }, "GoatBots Card Watcher: Automatically started delivery");
+        this.log(
+          { level: 1 },
+          "GoatBots Card Watcher: Automatically started delivery"
+        );
         let { autostart, previousURL } = history.state;
         // We use the history to store state between page loads. That way we can
         // avoid messing with the normal usage of GoatBots. When we auto-start
@@ -200,15 +238,18 @@ class CardWatcher {
       "DOMContentLoaded",
       () => {
         if (document.querySelector("#main .price-list")) {
-          GM_registerMenuCommand(page ? "Edit Cards List" : "Add Page to Watchlist", () =>
-            this.editCardListDialog()
+          GM_registerMenuCommand(
+            page ? "Edit Cards List" : "Add Page to Watchlist",
+            () => this.editCardListDialog()
           );
         }
       },
       { once: true }
     );
     if (!page) return;
-    GM_registerMenuCommand("Remove Page from Watchlist", () => this.removeFromWatchlist());
+    GM_registerMenuCommand("Remove Page from Watchlist", () =>
+      this.removeFromWatchlist()
+    );
     this.log({}, "GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
@@ -221,8 +262,12 @@ class CardWatcher {
       };
     }
     // Construct the predefined audio files.
-    this.voiceAudio = new Audio("data:audio/mp3;base64," + this.audio["Voice audio file"]);
-    this.alertAudio = new Audio("data:audio/mp3;base64," + this.audio["Alert audio file"]);
+    this.voiceAudio = new Audio(
+      `data:audio/mp3;base64,${this.audio["Voice audio file"]}`
+    );
+    this.alertAudio = new Audio(
+      `data:audio/mp3;base64,${this.audio["Alert audio file"]}`
+    );
   }
 
   /**
@@ -240,43 +285,63 @@ class CardWatcher {
     let key = leaving ? "leaving" : url;
     if (key in this.requests) {
       if (key === "leaving") {
-        if (debug) console.log("GoatBots Card Watcher AJAX: blocking requests because " + key);
+        if (debug) {
+          console.log(
+            `GoatBots Card Watcher AJAX: blocking requests because ${key}`
+          );
+        }
         return;
       }
       this.requests[key].abort();
       delete this.requests[key];
-      if (debug) console.log("GoatBots Card Watcher AJAX: aborting previous request " + key);
+      if (debug) {
+        console.log(
+          `GoatBots Card Watcher AJAX: aborting previous request ${key}`
+        );
+      }
     }
     let request = new XMLHttpRequest();
     request.open("POST", url);
     request.timeout = 30000;
     request.onload = () => {
-      if (debug) console.log("GoatBots Card Watcher AJAX: response status: " + request.status);
-      if (request.status == 403) location.href = "/login";
-      else {
-        if (request.status == 200) {
-          if (debug) console.log("GoatBots Card Watcher AJAX: response: " + request.response);
-          if (success) {
-            if (debug) console.log("GoatBots Card Watcher AJAX: calling success function");
-            success(request.response);
-          }
-          if (key in this.requests && key !== "leaving") {
-            delete this.requests[key];
-          }
-        } else if (reject) {
-          reject({ status: request.status, response: request.response });
-          return;
-        } else if (confirm("GoatBots Card Watcher hit a server error. Reload?")) {
-          location.reload();
+      if (debug) {
+        console.log(
+          `GoatBots Card Watcher AJAX: response status: ${request.status}`
+        );
+      }
+      if (request.status == 403) {
+        location.href = "/login";
+      } else if (request.status == 200) {
+        if (debug) {
+          console.log(
+            `GoatBots Card Watcher AJAX: response: ${request.response}`
+          );
         }
+        if (success) {
+          if (debug) {
+            console.log("GoatBots Card Watcher AJAX: calling success function");
+          }
+          success(request.response);
+        }
+        if (key in this.requests && key !== "leaving") {
+          delete this.requests[key];
+        }
+      } else if (reject) {
+        reject({ status: request.status, response: request.response });
+      } else if (confirm("GoatBots Card Watcher hit a server error. Reload?")) {
+        location.reload();
       }
     };
     let form = new FormData();
     if (data) {
-      if (data instanceof FormData) form = data;
+      if (FormData.isPrototypeOf(data)) form = data;
       else for (let el in data) form.append(el, data[el]);
-      if (debug) console.log("GoatBots Card Watcher AJAX: sending data: " + form);
-    } else if (debug) console.log("GoatBots Card Watcher AJAX: sending no data");
+      if (debug) {
+        console.log(`GoatBots Card Watcher AJAX: sending data: ${form}`);
+      }
+    } else if (debug) {
+      console.log("GoatBots Card Watcher AJAX: sending no data");
+    }
     request.send(form);
     this.requests[key] = request;
   }
@@ -284,22 +349,33 @@ class CardWatcher {
   // Invoked when the page finishes loading. Scan for new cards.
   handleEvent() {
     this.log({ level: 3 }, "GoatBots Card Watcher: loaded");
-    let cards = [];
+    let cardNames = [];
     let rows = [];
-    // Scan every card in the page's price list.
-    for (let row of document.querySelector("#main .price-list")?.children) {
-      if (row.className === "header") continue;
-      let name = row.querySelector(".name")?.innerText?.trim();
-      if (this.cards.includes(name)) {
-        row.setAttribute("watching", "true");
-        // Only handle the card if it's in stock.
-        if (row.querySelector(".stock")?.classList.contains("out")) continue;
-        this.log({ level: 4 }, `GoatBots Card Watcher: ${name} in stock`);
-        cards.push(name);
-        // If the card isn't already in our cart, add it.
-        if (row.querySelector(".delivery")?.firstElementChild?.classList.contains("delivery-count"))
-          continue;
-        rows.push(row);
+    // Scan every card in the page's price lists.
+    for (let pricelist of document.querySelectorAll("#main .price-list")) {
+      for (let row of pricelist?.children) {
+        if (row.className === "header") continue;
+        let id = row.dataset.item;
+        let found = id && this.cards?.find(c => c.id === id);
+        if (found) {
+          row.setAttribute("watching", "true");
+          // Only handle the card if it's in stock.
+          if (row.querySelector(".stock")?.classList.contains("out")) continue;
+          this.log(
+            { level: 4 },
+            `GoatBots Card Watcher: ${found.name} in stock`
+          );
+          cardNames.push(found.name);
+          // If the card isn't already in our cart, add it.
+          if (
+            row
+              .querySelector(".delivery")
+              ?.firstElementChild?.classList.contains("delivery-count")
+          ) {
+            continue;
+          }
+          rows.push(row);
+        }
       }
     }
     if (this.config["Pause watching"]) {
@@ -315,23 +391,29 @@ class CardWatcher {
         data = JSON.parse(data);
         if (!data) {
           // If we found cards, start the alert process.
-          if (cards.length > 0) {
+          if (cardNames.length) {
             this.addToCart(rows);
             if (this.config["Use text-to-speech"] && window.speechSynthesis) {
               // Limit the length of the speech if user chose to.
               let limit = this.config["Limit number of card names to speak"];
-              if (limit && typeof limit === "number") cards.splice(limit);
-              if (!this.config["Speak card numbers and tags"]) {
-                // Elide everything after the hash # character to remove number/tag.
-                cards = cards.map(item => item.split("#")[0].trim());
-              }
-              this.playSynthAlert(cards.join("; "));
-            } else this.playVoiceAlert();
+              if (limit && typeof limit === "number") cardNames.splice(limit);
+              this.playSynthAlert(cardNames.join("; "));
+            } else {
+              this.playVoiceAlert();
+            }
             return;
           }
         } else {
-          this.log({ level: 4 }, "GoatBots Card Watcher: delivery active :>> ", data.text);
-          this.log({ level: 4 }, "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+          this.log(
+            { level: 4 },
+            "GoatBots Card Watcher: delivery active :>> ",
+            data.text
+          );
+          this.log(
+            { level: 4 },
+            "GoatBots Card Watcher: delivery hash :>> ",
+            data.hash
+          );
         }
         this.countdown();
       },
@@ -360,11 +442,21 @@ class CardWatcher {
                 !(document.hidden || this.config["Refresh while active"])
               ) {
                 this.countdown();
-              } else location.reload();
+              } else {
+                location.reload();
+              }
             }
           } else {
-            this.log({ level: 4 }, "GoatBots Card Watcher: delivery active :>> ", data.text);
-            this.log({ level: 4 }, "GoatBots Card Watcher: delivery hash :>> ", data.hash);
+            this.log(
+              { level: 4 },
+              "GoatBots Card Watcher: delivery active :>> ",
+              data.text
+            );
+            this.log(
+              { level: 4 },
+              "GoatBots Card Watcher: delivery hash :>> ",
+              data.hash
+            );
             this.countdown();
           }
         },
@@ -387,14 +479,14 @@ class CardWatcher {
     if (row !== undefined) {
       this.log(
         { level: 3 },
-        "GoatBots Card Watcher: adding " +
-          row.querySelector(".name")?.innerText?.trim() +
-          " to cart"
+        `GoatBots Card Watcher: adding ${row
+          .querySelector(".name")
+          ?.innerText?.trim()} to cart`
       );
       this.makeRequest({
         url: "/ajax/delivery-item",
         data: { item: row.dataset.item },
-        abort: "item" + row.dataset.item,
+        abort: `item${row.dataset.item}`,
         debug: this.config["Debug log level"] > 1,
         success: () => this.addToCart(rows, ++i),
       });
@@ -429,7 +521,11 @@ class CardWatcher {
             // to distinguish between the *user* starting delivery manually and
             // the *script* starting delivery automatically. That way we don't
             // screw up the normal usage of GoatBots.
-            history.pushState({ autostart: true, previousURL: location.href }, "", "/delivery");
+            history.pushState(
+              { autostart: true, previousURL: location.href },
+              "",
+              "/delivery"
+            );
             location.reload();
           },
           reject: () => {
@@ -444,7 +540,7 @@ class CardWatcher {
     } else {
       this.log(
         {},
-        "GoatBots Card Watcher: waiting for " + this.finishedSpeaking
+        `GoatBots Card Watcher: waiting for ${this.finishedSpeaking}`
           ? "items to be added to cart"
           : "speech/audio to finish"
       );
@@ -472,7 +568,11 @@ class CardWatcher {
             this.tryDelivery();
             speech.onend = null;
           };
-          this.log({ level: 3 }, "GoatBots Card Watcher: speaking words :>> ", words);
+          this.log(
+            { level: 3 },
+            "GoatBots Card Watcher: speaking words :>> ",
+            words
+          );
           this.alertAudio.play();
           window.speechSynthesis.speak(speech);
         } else {
@@ -513,22 +613,40 @@ class CardWatcher {
    */
   onValueChange(id, oldValue, newValue, remote) {
     if (oldValue === newValue) return;
-    this.log({ level: 4 }, "GoatBots Card Watcher: setting updated — " + id + " :>> ", newValue);
+    this.log(
+      { level: 4 },
+      `GoatBots Card Watcher: setting updated — ${id} :>> `,
+      newValue
+    );
     this.config[id] = newValue;
     let menu = document.getElementById("card-watcher-menu");
     switch (id) {
       case "Pause watching":
         if (menu) {
-          let label = this.config["Pause watching"] ? "Resume Watching" : "Pause Watching";
+          let label = this.config["Pause watching"]
+            ? "Resume Watching"
+            : "Pause Watching";
           let item = menu.querySelector("a[href='#pause']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        } else this.log({ level: 1, mode: "warn" }, "GoatBots Card Watcher: menu missing");
-        if (!remote && !newValue && oldValue && this.cards?.length) location.reload();
-        GM_unregisterMenuCommand(oldValue ? "Resume Watching" : "Pause Watching");
-        GM_registerMenuCommand(newValue ? "Resume Watching" : "Pause Watching", () => {
-          GM_setValue("Pause watching", !newValue);
-        });
+        } else {
+          this.log(
+            { level: 1, mode: "warn" },
+            "GoatBots Card Watcher: menu missing"
+          );
+        }
+        if (!remote && !newValue && oldValue && this.cards?.length) {
+          location.reload();
+        }
+        GM_unregisterMenuCommand(
+          oldValue ? "Resume Watching" : "Pause Watching"
+        );
+        GM_registerMenuCommand(
+          newValue ? "Resume Watching" : "Pause Watching",
+          () => {
+            GM_setValue("Pause watching", !newValue);
+          }
+        );
         break;
       case "Automatically start delivery":
         if (menu) {
@@ -538,7 +656,12 @@ class CardWatcher {
           let item = menu.querySelector("a[href='#autostart']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
-        } else this.log({ level: 1, mode: "warn" }, "GoatBots Card Watcher: menu missing");
+        } else {
+          this.log(
+            { level: 1, mode: "warn" },
+            "GoatBots Card Watcher: menu missing"
+          );
+        }
         GM_unregisterMenuCommand(
           oldValue ? "Disable Automatic Delivery" : "Enable Automatic Delivery"
         );
@@ -552,11 +675,45 @@ class CardWatcher {
     }
   }
 
+  getCardName(row) {
+    let name;
+    if (row.className === "header") return name;
+    let rowName = row.querySelector(".name").innerText?.trim() ?? "";
+    let pageType = location.pathname.split("/")[1];
+    let setName = row
+      .querySelector(".rarity use")
+      ?.getAttribute("href")
+      .match(/.svg#cardset-(.*)/)?.[1]
+      ?.toUpperCase();
+    switch (pageType) {
+      case "card": {
+        let pageName =
+          document.querySelector("body > main > h1")?.innerText?.trim() ?? "";
+        name = `${pageName} (${`${setName} ${rowName}`.trim()})`;
+        break;
+      }
+      case "set":
+      default: {
+        let section = row.parentElement.previousElementSibling;
+        let sectionName =
+          (section.classList.contains("next-frame") &&
+            section?.innerText?.trim()) ||
+          "";
+        let cardType = sectionName?.match(/(.*) Cards/)?.[1]?.trim() ?? "";
+        name = `${rowName} (${`${setName} ${cardType}`.trim()})`;
+        break;
+      }
+    }
+    return name;
+  }
+
   // Open the card list editor dialog.
   editCardListDialog() {
     if (document.querySelector(".card-watcher-dialog")) return;
     this.log({}, "GoatBots Card Watcher: opening card list editor");
-    let page = this.config.Watchlist.find(page => page.path === location.pathname);
+    let page = this.config.Watchlist.find(
+      page => page.path === location.pathname
+    );
     let { path, cards } = page ?? { path: location.pathname };
 
     let dialog = document.createElement("dialog");
@@ -593,14 +750,26 @@ class CardWatcher {
     let cardsTitle = cardsLabel.appendChild(document.createElement("p"));
     cardsTitle.textContent = "Cards needed on page:";
     let cardsField = cardsLabel.appendChild(document.createElement("textarea"));
-    let exampleCard1 = document.querySelector("#main .price-list li[data-item]");
-    let exampleCard2 = exampleCard1?.nextElementSibling;
-    let exampleCardText1 = exampleCard1?.querySelector(".name")?.textContent || "Example Card #1";
-    let exampleCardText2 = exampleCard2?.querySelector(".name")?.textContent || "Example Card #2";
+    let exampleCard2 = document.querySelector(
+      "#main .price-list:last-of-type li[data-item]:last-child"
+    );
+    let exampleCard1 = exampleCard2?.previousElementSibling;
+    let exampleCardObj1 = {
+      name: this.getCardName(exampleCard1) || "Example Card #1",
+      id: exampleCard1?.dataset.item || "unique-card-id-1",
+    };
+    let exampleCardObj2 = {
+      name: this.getCardName(exampleCard2) || "Example Card #2",
+      id: exampleCard2?.dataset.item || "unique-card-id-2",
+    };
     cardsField.required = true;
     cardsField.spellcheck = false;
-    cardsField.placeholder = `Add card names exactly as they appear in the page, separated by a line break:\n\n${exampleCardText1}\n${exampleCardText2}`;
-    if (cards) cardsField.value = cards.join(`\n`);
+    cardsField.placeholder = `Add cards to the JSON list with the "Select by Clicking" button below. You can choose any name for the card.\n\n${JSON.stringify(
+      [exampleCardObj1, exampleCardObj2],
+      null,
+      2
+    )}`;
+    if (cards?.length) cardsField.value = JSON.stringify(cards, null, 2);
 
     let buttonBox = form.appendChild(document.createElement("div"));
     buttonBox.className = "button-box";
@@ -609,7 +778,9 @@ class CardWatcher {
     saveBtn.setAttribute("mode", "list-save");
     saveBtn.textContent = "Save";
 
-    let clickSelectBtn = buttonBox.appendChild(document.createElement("button"));
+    let clickSelectBtn = buttonBox.appendChild(
+      document.createElement("button")
+    );
     clickSelectBtn.setAttribute("mode", "select");
     clickSelectBtn.textContent = "Select by Clicking";
 
@@ -635,38 +806,63 @@ class CardWatcher {
     clickSelectForm.noValidate = true;
     clickSelectForm.style.display = "none";
 
-    let clickSelectButtonBox = clickSelectForm.appendChild(document.createElement("div"));
+    let clickSelectButtonBox = clickSelectForm.appendChild(
+      document.createElement("div")
+    );
     clickSelectButtonBox.className = "button-box";
-    let clickSelectConfirmBtn = clickSelectButtonBox.appendChild(document.createElement("button"));
+    let clickSelectConfirmBtn = clickSelectButtonBox.appendChild(
+      document.createElement("button")
+    );
     clickSelectConfirmBtn.setAttribute("mode", "select-confirm");
     clickSelectConfirmBtn.textContent = "Confirm";
-    let clickSelectCancelBtn = clickSelectButtonBox.appendChild(document.createElement("button"));
+    let clickSelectCancelBtn = clickSelectButtonBox.appendChild(
+      document.createElement("button")
+    );
     clickSelectCancelBtn.setAttribute("mode", "select-cancel");
     clickSelectCancelBtn.textContent = "Cancel";
 
     // Click handler for click-to-select mode.
     let clickSelect = e => {
       let row = e.target.closest("li");
-      if (row && row.className !== "header") {
+      if (row && row.className !== "header" && row.dataset.item) {
         e.stopImmediatePropagation();
         e.stopPropagation();
         e.preventDefault();
-        this.log({ level: 3 }, "GoatBots Card Watcher: card row selected by click :>> ", row);
-        if (row.hasAttribute("watching")) row.removeAttribute("watching");
-        else row.setAttribute("watching", "true");
+        this.log(
+          { level: 3 },
+          "GoatBots Card Watcher: card row selected by click :>> ",
+          row
+        );
+        if (row.hasAttribute("watching")) {
+          row.removeAttribute("watching");
+        } else {
+          row.setAttribute("watching", "true");
+        }
       }
     };
 
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
+      this.log(
+        {},
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
       switch (e.submitter) {
         case saveBtn: {
           // Save the current values.
           let path = pathField.value.trim();
           let cardsValue = cardsField.value;
-          let cards = cardsValue.split(/\n+\s*/).filter(val => !!val.trim());
+          let cards = [];
+          try {
+            cards = JSON.parse(cardsValue);
+          } catch (error) {
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid JSON"
+            );
+          }
           // Check that the inputs are valid, and if not, dispatch a
           // notification to the user through generic web API. We could set
           // these values on the path field by default, but then the path field
@@ -674,10 +870,13 @@ class CardWatcher {
           // only care if it's valid when the user is clicking the save button.
           // And I don't want to use click handlers because there are other ways
           // to submit the form, like hitting Enter in an input field.
-          pathField.title = "/" + path;
+          pathField.title = `/${path}`;
           if (!cards.length) cardsField.value = "";
           if (!form.checkValidity()) {
-            this.log({ level: 3, mode: "warn" }, "GoatBots Card Watcher: invalid input");
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid input"
+            );
             form.reportValidity();
             pathField.removeAttribute("title");
             cardsField.value = cardsValue;
@@ -688,10 +887,17 @@ class CardWatcher {
           if (page) {
             // If there was no change to the watchlist, don't bother with
             // updating user settings or reloading the page.
-            if (page.path === path && JSON.stringify(page.cards) === JSON.stringify(cards)) break;
+            if (
+              page.path === path &&
+              JSON.stringify(page.cards) === JSON.stringify(cards)
+            ) {
+              break;
+            }
             page.path = path;
             page.cards = cards;
-          } else this.config.Watchlist.push({ path, cards });
+          } else {
+            this.config.Watchlist.push({ path, cards });
+          }
           GM_setValue("Watchlist", this.config.Watchlist);
           // If the user modified the path field such that it no longer matches
           // the current page URL, navigate to the new path to begin watching.
@@ -702,16 +908,33 @@ class CardWatcher {
         }
         case clickSelectBtn: {
           // Handle selecting cards by click.
-          document.querySelector("#main .price-list")?.addEventListener("click", clickSelect, true);
+          document
+            .querySelector("#main")
+            ?.addEventListener("click", clickSelect, true);
           form.style.display = title.style.display = "none";
           clickSelectForm.style.removeProperty("display");
           clickSelectTitle.style.removeProperty("display");
-          for (let row of document.querySelector("#main .price-list")?.children) {
-            if (row.className === "header") continue;
-            let name = row.querySelector(".name")?.innerText?.trim();
-            let cards = cardsField.value.trim().split(/\n+\s*/);
-            if (name && cards.includes(name)) row.setAttribute("watching", "true");
-            else row.removeAttribute("watching");
+          let cards = [];
+          try {
+            cards = JSON.parse(cardsField.value);
+          } catch (error) {
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid JSON"
+            );
+          }
+          for (let pricelist of document.querySelectorAll(
+            "#main .price-list"
+          )) {
+            for (let row of pricelist?.children) {
+              if (row.className === "header") continue;
+              let id = row.dataset.item;
+              if (id && cards.find(c => c.id === id)) {
+                row.setAttribute("watching", "true");
+              } else {
+                row.removeAttribute("watching");
+              }
+            }
           }
           return;
         }
@@ -721,11 +944,18 @@ class CardWatcher {
           return;
         }
         case cancelBtn:
-          for (let row of document.querySelector("#main .price-list")?.children) {
-            if (row.className === "header") continue;
-            let name = row.querySelector(".name")?.innerText?.trim();
-            if (name && this.cards?.includes(name)) row.setAttribute("watching", "true");
-            else row.removeAttribute("watching");
+          for (let pricelist of document.querySelectorAll(
+            "#main .price-list"
+          )) {
+            for (let row of pricelist?.children) {
+              if (row.className === "header") continue;
+              let id = row.dataset.item;
+              if (id && this.cards?.find(c => c.id === id)) {
+                row.setAttribute("watching", "true");
+              } else {
+                row.removeAttribute("watching");
+              }
+            }
           }
           break;
         default:
@@ -741,34 +971,80 @@ class CardWatcher {
     // Click-to-select form submission handler.
     clickSelectForm.onsubmit = e => {
       e.preventDefault();
-      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
+      this.log(
+        {},
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
       switch (e.submitter) {
         case clickSelectConfirmBtn: {
           // Add the selected cards to the card list field
-          let cards = [];
-          for (let row of document.querySelector("#main .price-list")?.children) {
-            if (row.className !== "header" && row.hasAttribute("watching")) {
-              let cardName = row.querySelector(".name");
-              if (cardName) cards.push(cardName.innerText?.trim());
+          let selectedCards = [];
+          let currentCards = [];
+          try {
+            currentCards = JSON.parse(cardsField.value);
+          } catch (error) {
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid JSON"
+            );
+          }
+          for (let pricelist of document.querySelectorAll(
+            "#main .price-list"
+          )) {
+            for (let row of pricelist?.children) {
+              if (row.className !== "header" && row.hasAttribute("watching")) {
+                let id = row.dataset.item;
+                if (!id) {
+                  row.removeAttribute("watching");
+                  continue;
+                }
+                let card = currentCards.find(c => c.id === id) || { id };
+                let name = card.name || this.getCardName(row);
+                if (name) {
+                  card.name = name;
+                }
+                selectedCards.push(card);
+              }
             }
           }
-          cardsField.value = cards.join(`\n`);
+          cardsField.value = selectedCards.length
+            ? JSON.stringify(selectedCards, null, 2)
+            : "";
           break;
         }
         default:
         // fall through
         case clickSelectCancelBtn:
           // Unmark the selected cards and don't add them to the list.
-          for (let row of document.querySelector("#main .price-list")?.children) {
-            if (row.className === "header") continue;
-            let name = row.querySelector(".name")?.innerText?.trim();
-            let cards = cardsField.value.trim().split(/\n+\s*/);
-            if (name && cards.includes(name)) row.setAttribute("watching", "true");
-            else row.removeAttribute("watching");
+          let currentCards = [];
+          try {
+            currentCards = JSON.parse(cardsField.value);
+          } catch (error) {
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid JSON"
+            );
+          }
+          for (let pricelist of document.querySelectorAll(
+            "#main .price-list"
+          )) {
+            for (let row of pricelist?.children) {
+              if (row.className === "header") continue;
+              let id = row.dataset.item;
+              let found = id && currentCards.find(c => c.id === id);
+              if (found) {
+                row.setAttribute("watching", "true");
+              } else {
+                row.removeAttribute("watching");
+              }
+            }
           }
           break;
       }
-      document.querySelector("#main .price-list")?.removeEventListener("click", clickSelect, true);
+      document
+        .querySelector("#main")
+        ?.removeEventListener("click", clickSelect, true);
       clickSelectForm.style.display = clickSelectTitle.style.display = "none";
       form.style.removeProperty("display");
       title.style.removeProperty("display");
@@ -802,9 +1078,13 @@ class CardWatcher {
     form.setAttribute("method", "dialog");
     form.noValidate = true;
 
-    let refreshIntervalLabel = form.appendChild(document.createElement("label"));
+    let refreshIntervalLabel = form.appendChild(
+      document.createElement("label")
+    );
     refreshIntervalLabel.id = "card-watcher-refresh-interval";
-    let refreshIntervalTitle = refreshIntervalLabel.appendChild(document.createElement("span"));
+    let refreshIntervalTitle = refreshIntervalLabel.appendChild(
+      document.createElement("span")
+    );
     refreshIntervalTitle.textContent = "Refresh interval:";
     refreshIntervalTitle.style.cursor = "help";
     refreshIntervalTitle.title = `How often to refresh the page to check stock, in milliseconds. This should be set to at least the average page load time. If it normally takes 2 seconds for the page to finish loading (as indicated by a loading icon in your browser, etc.), then you don't want to set this to less than 2000.`;
@@ -820,7 +1100,9 @@ class CardWatcher {
 
     let activeRefreshLabel = form.appendChild(document.createElement("label"));
     activeRefreshLabel.id = "card-watcher-active-refresh";
-    let activeRefreshTitle = activeRefreshLabel.appendChild(document.createElement("span"));
+    let activeRefreshTitle = activeRefreshLabel.appendChild(
+      document.createElement("span")
+    );
     activeRefreshTitle.textContent = "Refresh while active:";
     activeRefreshTitle.style.cursor = "help";
     activeRefreshTitle.title = `By default, the page will only refresh when the tab is in the background (i.e., you have a different tab focused). This way you can still use the page normally if you want to. But if you use windows instead of tabs, so that your GoatBots tab is always visible, you should check this box.`;
@@ -840,20 +1122,11 @@ class CardWatcher {
     TTSField.checked = !!this.config["Use text-to-speech"];
     TTSLabel.appendChild(TTSField);
 
-    let cardNumLabel = form.appendChild(document.createElement("label"));
-    cardNumLabel.id = "card-watcher-speak-card-numbers";
-    let cardNumTitle = cardNumLabel.appendChild(document.createElement("span"));
-    cardNumTitle.textContent = "Speak card numbers and tags:";
-    cardNumTitle.style.cursor = "help";
-    cardNumTitle.title = `If you uncheck this box, card numbers and tags will be omitted from the text-to-speech alert. So for example, instead of saying "Plains #268" it would just say "Plains" with no number. As for tags, instead of saying "Ultimate Masters #Full Art" it would just say "Plains" with no tag. If you check this box, it will just speak the card names exactly as they are.`;
-    let cardNumField = document.createElement("input");
-    cardNumField.type = "checkbox";
-    cardNumField.checked = !!this.config["Speak card numbers and tags"];
-    cardNumLabel.appendChild(cardNumField);
-
     let cardLimitLabel = form.appendChild(document.createElement("label"));
     cardLimitLabel.id = "card-watcher-card-limit";
-    let cardLimitTitle = cardLimitLabel.appendChild(document.createElement("span"));
+    let cardLimitTitle = cardLimitLabel.appendChild(
+      document.createElement("span")
+    );
     cardLimitTitle.textContent = "Limit number of card names to speak:";
     cardLimitTitle.style.cursor = "help";
     cardLimitTitle.title = `If there are many cards to add to the cart, saying all their names out loud might be very slow. And we wait for speech to finish before starting delivery, since starting delivery will stop the speech. So if it has to say 10 names, that could mean 20-30 seconds before we initiate delivery. And that means someone else might initiate delivery on one of the desired items first. So this optional setting allows you to put a cap on the number of names spoken. If you set this to 0, then there is no limit. Any positive integer will set a proper limit. I personally set this to 3.`;
@@ -862,13 +1135,16 @@ class CardWatcher {
     cardLimitField.required = true;
     cardLimitField.min = 0;
     cardLimitField.max = 100;
-    cardLimitField.placeholder = this.defaults["Limit number of card names to speak"];
+    cardLimitField.placeholder =
+      this.defaults["Limit number of card names to speak"];
     cardLimitField.value = this.config["Limit number of card names to speak"];
     cardLimitLabel.appendChild(cardLimitField);
 
     let speechRateLabel = form.appendChild(document.createElement("label"));
     speechRateLabel.id = "card-watcher-speech-rate";
-    let speechRateTitle = speechRateLabel.appendChild(document.createElement("span"));
+    let speechRateTitle = speechRateLabel.appendChild(
+      document.createElement("span")
+    );
     speechRateTitle.textContent = "Text-to-speech rate:";
     speechRateTitle.style.cursor = "help";
     speechRateTitle.title = `How fast should the speech play? The value can range between 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the current platform or voice, which should correspond to a normal speaking rate. Other values act as a percentage relative to this, so for example 2 is twice as fast, 0.5 is half as fast, etc. I prefer 1.1 since the default voice on my computer (Windows 10) is kinda slow. Also, the script doesn't navigate to the delivery page until the voice alert has finished. So, a slower voice rate might mean a longer delay in starting delivery.`;
@@ -885,7 +1161,9 @@ class CardWatcher {
     // Debug log level
     let logLevelLabel = form.appendChild(document.createElement("label"));
     logLevelLabel.id = "card-watcher-log-level";
-    let logLevelTitle = logLevelLabel.appendChild(document.createElement("span"));
+    let logLevelTitle = logLevelLabel.appendChild(
+      document.createElement("span")
+    );
     logLevelTitle.textContent = "Debug log level:";
     logLevelTitle.style.cursor = "help";
     logLevelTitle.title = `An integer between 0 and 4. At the default level 0, we won't log anything to the console except for errors. At level 1, major debug messages will be logged. At level 2, less significant messages. And so on. The max value 4 will log everything. If you need my help troubleshooting something, set this to 4, try to reproduce the bug, and then copy the contents of your console and send it to me.`;
@@ -913,23 +1191,38 @@ class CardWatcher {
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log({}, "GoatBots Card Watcher: form submission :>> ", e.submitter.getAttribute("mode"));
+      this.log(
+        {},
+        "GoatBots Card Watcher: form submission :>> ",
+        e.submitter.getAttribute("mode")
+      );
       switch (e.submitter) {
         case saveBtn: {
           // Check that the user's inputs are all valid, and if not, dispatch a
           // notification to the user through generic web API.
           if (!form.checkValidity()) {
-            this.log({ level: 3, mode: "warn" }, "GoatBots Card Watcher: invalid input");
+            this.log(
+              { level: 3, mode: "warn" },
+              "GoatBots Card Watcher: invalid input"
+            );
             form.reportValidity();
             return;
           }
           // Save the current values.
-          GM_setValue("Refresh interval", Number(refreshIntervalField.value.trim()));
+          GM_setValue(
+            "Refresh interval",
+            Number(refreshIntervalField.value.trim())
+          );
           GM_setValue("Refresh while active", activeRefreshField.checked);
           GM_setValue("Use text-to-speech", TTSField.checked);
-          GM_setValue("Speak card numbers and tags", cardNumField.checked);
-          GM_setValue("Limit number of card names to speak", Number(cardLimitField.value.trim()));
-          GM_setValue("Text-to-speech rate", Number(speechRateField.value.trim()));
+          GM_setValue(
+            "Limit number of card names to speak",
+            Number(cardLimitField.value.trim())
+          );
+          GM_setValue(
+            "Text-to-speech rate",
+            Number(speechRateField.value.trim())
+          );
           GM_setValue("Debug log level", Number(logLevelField.value.trim()));
           break;
         }
@@ -956,11 +1249,20 @@ class CardWatcher {
   // Delete the current page from the watchlist.
   removeFromWatchlist() {
     this.log({ level: 3 }, "GoatBots Card Watcher: remove from watchlist?");
-    let idx = this.config.Watchlist.findIndex(page => page.path === location.pathname);
+    let idx = this.config.Watchlist.findIndex(
+      page => page.path === location.pathname
+    );
     if (idx !== -1) {
       // Ask the user to confirm so they don't lose data.
-      if (confirm(`Are you sure you want to remove ${location.pathname} from the watchlist?`)) {
-        this.log({ level: 3 }, "GoatBots Card Watcher: yes, remove from watchlist");
+      if (
+        confirm(
+          `Are you sure you want to remove ${location.pathname} from the watchlist?`
+        )
+      ) {
+        this.log(
+          { level: 3 },
+          "GoatBots Card Watcher: yes, remove from watchlist"
+        );
         this.config.Watchlist.splice(idx, 1);
         GM_setValue("Watchlist", this.config.Watchlist);
         location.reload();
@@ -990,9 +1292,14 @@ class CardWatcher {
 
     document.body.addEventListener("keydown", e => {
       if (e.code === "Enter") {
-        let item = document.getElementById("card-watcher-menu").querySelector("li.selected");
+        let item = document
+          .getElementById("card-watcher-menu")
+          .querySelector("li.selected");
         if (item) {
-          this.log({}, "GoatBots Card Watcher: overriding Enter key behavior for our menu items");
+          this.log(
+            {},
+            "GoatBots Card Watcher: overriding Enter key behavior for our menu items"
+          );
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -1005,7 +1312,8 @@ class CardWatcher {
     // for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
     let submenuList = submenu.firstElementChild;
     for (let i = 0; i < 5; i++) {
-      let li = submenuList.children[i] ?? submenuList.children[i - 1].cloneNode(true);
+      let li =
+        submenuList.children[i] ?? submenuList.children[i - 1].cloneNode(true);
       items.push(li.firstElementChild);
     }
 
@@ -1016,7 +1324,9 @@ class CardWatcher {
       items[0].setAttribute("href", "#cardlist");
       items[0].setAttribute("onclick", "return false");
       items[0].addEventListener("click", () => this.editCardListDialog());
-    } else items[0].parentElement.remove();
+    } else {
+      items[0].parentElement.remove();
+    }
 
     if (handling) {
       let label1 = "Remove Page from Watchlist";
@@ -1025,9 +1335,13 @@ class CardWatcher {
       items[1].setAttribute("href", "#remove");
       items[1].setAttribute("onclick", "return false");
       items[1].addEventListener("click", () => this.removeFromWatchlist());
-    } else items[1].parentElement.remove();
+    } else {
+      items[1].parentElement.remove();
+    }
 
-    let label2 = this.config["Pause watching"] ? "Resume Watching" : "Pause Watching";
+    let label2 = this.config["Pause watching"]
+      ? "Resume Watching"
+      : "Pause Watching";
     items[2].setAttribute("aria-label", label2);
     items[2].textContent = label2;
     items[2].setAttribute("href", "#pause");
@@ -1044,7 +1358,10 @@ class CardWatcher {
     items[3].setAttribute("href", "#autostart");
     items[3].setAttribute("onclick", "return false");
     items[3].addEventListener("click", () =>
-      GM_setValue("Automatically start delivery", !this.config["Automatically start delivery"])
+      GM_setValue(
+        "Automatically start delivery",
+        !this.config["Automatically start delivery"]
+      )
     );
 
     let label4 = "Advanced Settings";
@@ -1060,94 +1377,114 @@ class CardWatcher {
     ul.children[3].after(menu);
   }
 
-  // These are the default config values. There's some additional detail on the
-  // settings in the code comments below. I don't recommend editing this
-  // directly in the script, since your edits won't survive script updates.
-  // Instead, the script uses the GM API to save your settings permanently. The
-  // below data is just here for initially generating your settings on install.
+  /* These are the default config values. There's some additional detail on the
+   * settings in the code comments below. I don't recommend editing this
+   * directly in the script, since your edits won't survive script updates.
+   * Instead, the script uses the GM API to save your settings permanently. The
+   * below data is just for initially generating your settings on install. */
   defaults = {
-    // This is the watchlist, where pages to watch and cards to scan for are
-    // listed. Your Watchlist array can have any number of members. Each member
-    // should be an object representing a GoatBots page to scan for cards on.
-    // Therefore, each member should have a path property and a cards property.
-    // The path property's value should be a valid GoatBots page pathname, and
-    // the cards property's value should be an array of card names to scan for
-    // on that page.
+    /* This is the watchlist, where pages to watch and cards to scan for are
+     * listed. Your Watchlist array can have any number of members. Each member
+     * should be an object representing a GoatBots page to scan for cards on.
+     * Therefore, each member should have a path property and a cards property.
+     * The path property's value should be a valid GoatBots page pathname, and
+     * the cards property's value should be an array of cards to scan for on
+     * that page. Each card should be an object with a name property and an id
+     * property. The name can be whatever you want, and will be spoken aloud if
+     * the card is found. The id should be the GoatBots card ID, which you can
+     * find in the DOM or by using the Select by Clicking button.
+     *
+     * For the path value, add the pathname for the GoatBots URL you want to
+     * watch. In this example, I want to watch the 2X2 promos page,
+     * https://www.goatbots.com/set/promotional-double-masters-2022+
+     * I add + at the end so I can use the page normally without it constantly
+     * refreshing the page. So I need to remove the protocol and domain
+     * https://www.goatbots.com and I get /set/promotional-double-masters-2022+
+     *
+     * Any GoatBots page with the usual row layout should work. For example, you
+     * can add paths like /card/plains if you want to scan for a specific Plains
+     * card that way. Or you can add a path like /boosters if you want to scan
+     * for "Modern Horizons 2 Booster" - of course, these boosters are always in
+     * stock, so that would be pointless. But you can add nearly any path.
+     *
+     * If you're unsure, you can easily get the exact pathname by navigating to
+     * the page, opening the devtools console, and typing location.pathname and
+     * hitting enter. The returned value is the pathname. Then just add a + if
+     * you want to be able to use the page normally. Then, when you navigate to
+     * that page (with the + added), the Card Watcher will start scanning for
+     * the cards you define in the cards array.
+     *
+     * In the cards array, add the cards you want to get an alert for. These
+     * need to be exact, so using the "Select by Clicking" button is highly
+     * recommended. */
 
-    // For the path value, add the pathname for the GoatBots URL you want to
-    // watch. In this example, I want to watch the 2X2 promos page,
-    // https://www.goatbots.com/set/promotional-double-masters-2022+
-    // I add + at the end so I can use the page normally without it constantly
-    // refreshing the page. So I need to remove the protocol and domain
-    // https://www.goatbots.com and I get /set/promotional-double-masters-2022+
-
-    // Any GoatBots page with the usual row layout should work. For example, you
-    // can add paths like /card/plains if you want to scan for a specific Plains
-    // card that way. Or you can add a path like /boosters if you want to scan
-    // for "Modern Horizons 2 Booster" - of course, these boosters are always in
-    // stock, so that would be pointless. But you can add nearly any path.
-
-    // If you're unsure, you can easily get the exact pathname by navigating to
-    // the page, opening the devtools console, and typing location.pathname and
-    // hitting enter. The returned value is the pathname. Then just add a + if
-    // you want to be able to use the page normally. Then, when you navigate to
-    // that page (with the + added), the Card Watcher will start scanning for
-    // the cards you define in the cards array.
-
-    // In the cards array, add the card names you want to get an alert for.
-    // These need to be exact, so if you're going to edit the settings JSON
-    // directly, I would recommend copying and pasting the names directly from
-    // the GoatBots page. If you need to add a lot of names, you can save time
-    // if you go to the GoatBots page you want to scan, open the devtools, and
-    // enter this snippet into the console:
-    // let cards = []; for (let row of document.querySelector("#main .price-list")?.children) { if (row.className === "header") continue; let name = row.querySelector(".name").innerText; cards.push(name); } console.log(cards);
-    // It will return an array with all the card names on the page. You can then
-    // right-click the returned array in the console and hit "Copy Object" to
-    // add it to your clipboard. Then just delete the names you don't care
-    // about and enter it in as the cards value for one of the pages below.
-    "Watchlist": [
-      // This is just an example. We're watching the page for Baldur's Gate, and
-      // we're scanning *that particular page* with *that exact path* for
-      // Ancient Copper Dragon and Ancient Gold Dragon. If you navigate to the
-      // Baldur's Gate page as normal, this won't activate, because there isn't
-      // any + at the end of the URL. If you add a + to the end of the URL, then
-      // it will start watching the page. Moreover, if the script found the same
-      // cards on a different page, it would do nothing. It's only searching for
-      // these cards on this specific page with this exact path. So you can
-      // think of each of these objects as a path-cards pair.
+    /**
+     * @typedef {Array<{
+     *  path: string;
+     *  cards: { name?: string; id: string }[];
+     * }>} Watchlist
+     */
+    Watchlist: [
+      /* This is just an example. We're watching the page for MOM promos, and
+       * we're scanning *that particular page* with *that exact path* for all
+       * the Showcase variants of the Phyrexian Praetors. If you navigate to the
+       * MOM promos page as normal, this won't activate, because that page
+       * doesn't have a + at the end of the URL. If you add a + to the end of
+       * the URL, then it will start watching the page. Moreover, if the script
+       * found the same cards on a different page, it would do nothing. It's
+       * only searching for these cards on this specific page with this exact
+       * path. So you can think of each of these objects as a path-cards pair.
+       * You'd set this kind of special path so you can still browse the site as
+       * normal, without the script interrupting what you're doing. */
       {
-        path: "/set/commander-legends-battle-for-baldurs-gate+", // pathname
-        cards: ["Ancient Copper Dragon", "Ancient Gold Dragon"], // cards list
+        path: "/set/promotional-march-of-the-machine+",
+        cards: [
+          {
+            id: "A4zDSnxvnkrkSg==",
+            name: "Sheoldred (MOM Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkrkSA==",
+            name: "Urabrask (MOM Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkrjTw==",
+            name: "Elesh Norn (MOM Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkrkTg==",
+            name: "Vorinclex (MOM Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkrjTQ==",
+            name: "Jin-Gitaxias (MOM Showcase)",
+          },
+        ],
       },
 
-      // This is the list I actually used, and the reason I wrote this script.
       {
-        path: "/set/promotional-double-masters-2022+",
+        path: "/card/sheoldred+",
         cards: [
-          "Wrenn and Six",
-          "Cavern of Souls",
-          "Aether Vial",
-          "Surgical Extraction #19",
-          "Supreme Verdict #43",
-          "Assassin's Trophy",
-          "City of Brass #79",
-          "Damnation #18",
-          "Monastery Swiftspear",
-          "Mulldrifter #11",
-          "Burning-Tree Emissary",
-          "Thought Scour",
-          "Grim Flayer",
-          "Crucible of Worlds #64",
-          "Glimpse the Unthinkable",
-          "Hardened Scales",
-          "Rampant Growth #29",
-          "Gifts Ungiven #13",
-          "Wall of Omens #2",
-          "Anger of the Gods",
-          "Pithing Needle #61",
-          "Bloodbraid Elf #40",
-          "Flickerwisp",
-          "Dragonlord Dromoka",
+          {
+            id: "A4zDSnxvn0ziSA==",
+            name: "Sheoldred (MOM Foil Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkrkSg==",
+            name: "Sheoldred (MOM Showcase)",
+          },
+          {
+            id: "A4zDSnxvnkroSQ==",
+            name: "Sheoldred (MOM Borderless)",
+          },
+          {
+            id: "A4zDSnxvnkjmQg==",
+            name: "Sheoldred (MOM Regular)",
+          },
+          {
+            id: "A4zDSnxvnkTlSg==",
+            name: "Sheoldred (MOM Foil)",
+          },
         ],
       },
     ],
@@ -1195,13 +1532,6 @@ class CardWatcher {
     // speech. You can disable text-to-speech by setting this to false. In that
     // case, it will use the fallback voice audio file defined at the bottom.
     "Use text-to-speech": true,
-
-    // If you set this to false, card numbers and tags will be omitted from the
-    // text-to-speech alert. So for example, instead of saying "Plains #268" it
-    // would just say "Plains" with no number. As for tags, instead of saying
-    // "Ultimate Masters #Full Art" it would just say "Plains" with no tag. If
-    // set to true it will just speak the card names exactly as they are.
-    "Speak card numbers and tags": true,
 
     // If there are many cards to add to the cart, saying all their names out
     // loud might be very slow. And we wait for speech to finish before starting
@@ -1294,7 +1624,7 @@ class CardWatcher {
 }
 .card-watcher-dialog textarea {
   min-width: 100%;
-  height: 256px;
+  height: 300px;
   padding: 0.5em;
   flex-grow: 1;
 }
