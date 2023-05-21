@@ -5,9 +5,11 @@
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
 // @downloadURL    https://cdn.jsdelivr.net/gh/aminomancer/GoatBots-Card-Watcher@latest/goatbotsCardWatcher.user.js
+// @updateURL      https://cdn.jsdelivr.net/gh/aminomancer/GoatBots-Card-Watcher@latest/goatbotsCardWatcher.user.js
 // @namespace      https://github.com/aminomancer
 // @match          https://www.goatbots.com/*
 // @description    Configure a list of cards to watch GoatBots until in stock. Pick a GoatBots page to watch, and click the cards you want to watch for. Then leave the script to automatically refresh that page on a set timer, check if any of the cards are in stock, and if so, add them to cart, play an audio alert, and (optionally) start delivery.
+// @license        https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 // The alert will use text-to-speech to audibly speak the names of the new cards
 // if text-to-speech is available on your computer. Otherwise it will just play
