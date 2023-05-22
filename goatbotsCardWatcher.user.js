@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        2.0.1
+// @version        2.1.0
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -116,7 +116,23 @@ if (GM4) {
 
 class CardWatcher {
   config = {};
+
   requests = {};
+
+  logger = {};
+
+  LOG_LEVELS = {
+    off: Number.MAX_VALUE,
+    error: 5,
+    warn: 4,
+    info: 3,
+    debug: 2,
+    all: Number.MIN_VALUE,
+  };
+
+  shouldLog(level, maxLevel = this.config["Debug log level"]) {
+    return this.LOG_LEVELS[maxLevel] <= this.LOG_LEVELS[level];
+  }
 
   /**
    * Log a message to the console, if the user's log level is less than or equal
@@ -124,19 +140,18 @@ class CardWatcher {
    * By default, a level 0 message will be logged in the console, but a level 1
    * message will not. For debugging purposes you can increase your log level
    * setting to 4. That will capture all messages.
-   * @param {Number} [level] the message's log level.
    * @param {String} [mode] the console method ("log" or "error" for example).
    * @param {any} message anything worth logging.
    */
-  log({ level = 2, mode = "info" } = {}, ...message) {
-    if ((this.config["Debug log level"] ?? 0) >= level) {
+  _log(mode = "debug", ...message) {
+    if (this.shouldLog(mode)) {
       console[mode](...message);
     }
   }
 
   migrateSettings() {
     // Check for old watchlist format { path: string, cards: string[] }[]
-    // New format is { path: string, cards: { id: string, name:string }[] }[]
+    // The new format is { path: string, cards: object[] }[]
     // Just wipe it since we can't get the card ids from the old format.
     if (typeof GM_getValue("Watchlist")[0]?.cards[0] === "string") {
       GM_setValue("Watchlist", this.defaults.Watchlist);
@@ -144,14 +159,18 @@ class CardWatcher {
   }
 
   constructor() {
+    // Add methods for all log levels.
+    for (const level of Object.keys(this.LOG_LEVELS)) {
+      if (["all", "off"].includes(level)) continue;
+      this.logger[level] = (...args) => this._log(level, ...args);
+    }
     // Maybe migrate old settings.
     this.migrateSettings();
     // Get the user settings or set them if they aren't already set.
     for (const [key, value] of Object.entries(this.defaults)) {
-      let saved = GM_getValue(key);
+      const saved = GM_getValue(key);
       if (saved === undefined) {
-        this.log(
-          { level: 4 },
+        this.logger.debug(
           `GoatBots Card Watcher: writing setting ${key} :>> `,
           value
         );
@@ -178,7 +197,7 @@ class CardWatcher {
       () => {
         GM_setValue("Pause watching", !this.config["Pause watching"]);
         if (this.config["Pause watching"] && this.cards?.length) {
-          location.reload();
+          window.location.reload();
         }
       }
     );
@@ -186,8 +205,8 @@ class CardWatcher {
     // Add styles to highlight watched cards.
     GM_addStyle(this.css);
     // Check if the current page is not in the watchlist.
-    let page = this.config.Watchlist.find(
-      page => page.path === location.pathname
+    const page = this.config.Watchlist.find(
+      page => page.path === window.location.pathname
     );
     // Add a custom menu to the page DOM.
     document.addEventListener(
@@ -196,14 +215,13 @@ class CardWatcher {
       { once: true }
     );
     // If we're on the delivery page...
-    if (location.pathname === "/delivery") {
+    if (window.location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
-      if (history.state && this.config["Automatically start delivery"]) {
-        this.log(
-          { level: 1 },
+      if (window.history.state && this.config["Automatically start delivery"]) {
+        this.logger.info(
           "GoatBots Card Watcher: Automatically started delivery"
         );
-        let { autostart, previousURL } = history.state;
+        const { autostart, previousURL } = window.history.state;
         // We use the history to store state between page loads. That way we can
         // avoid messing with the normal usage of GoatBots. When we auto-start
         // delivery, we mark the history with an autostart property and a
@@ -228,7 +246,7 @@ class CardWatcher {
               !document.getElementById("delivery-steps") &&
               !document.getElementById("delivery-count")?.textContent
             ) {
-              location.href = previousURL;
+              window.location.href = previousURL;
             }
           });
         }
@@ -239,7 +257,7 @@ class CardWatcher {
     document.addEventListener(
       "DOMContentLoaded",
       () => {
-        if (document.querySelector("#main .price-list")) {
+        if (this.pageCanBeWatched()) {
           GM_registerMenuCommand(
             page ? "Edit Cards List" : "Add Page to Watchlist",
             () => this.editCardListDialog()
@@ -252,7 +270,7 @@ class CardWatcher {
     GM_registerMenuCommand("Remove Page from Watchlist", () =>
       this.removeFromWatchlist()
     );
-    this.log({}, "GoatBots Card Watcher: watching the page");
+    this.logger.info("GoatBots Card Watcher: watching the page");
     this.path = page.path;
     this.cards = page.cards;
     // If the page's cards list is empty for some reason, do nothing.
@@ -283,8 +301,15 @@ class CardWatcher {
    * @param {Boolean} [leaving] will we leave the current page on success?
    * @param {Boolean} [debug] should we log info to console?
    */
-  makeRequest({ url, data, success, reject, leaving, debug } = {}) {
-    let key = leaving ? "leaving" : url;
+  makeRequest({
+    url,
+    data,
+    success,
+    reject,
+    leaving,
+    debug = this.shouldLog("debug"),
+  } = {}) {
+    const key = leaving ? "leaving" : url;
     if (key in this.requests) {
       if (key === "leaving") {
         if (debug) {
@@ -302,7 +327,7 @@ class CardWatcher {
         );
       }
     }
-    let request = new XMLHttpRequest();
+    const request = new XMLHttpRequest();
     request.open("POST", url);
     request.timeout = 30000;
     request.onload = () => {
@@ -311,9 +336,9 @@ class CardWatcher {
           `GoatBots Card Watcher AJAX: response status: ${request.status}`
         );
       }
-      if (request.status == 403) {
-        location.href = "/login";
-      } else if (request.status == 200) {
+      if (request.status === 403) {
+        window.location.href = "/login";
+      } else if (request.status === 200) {
         if (debug) {
           console.log(
             `GoatBots Card Watcher AJAX: response: ${request.response}`
@@ -330,14 +355,23 @@ class CardWatcher {
         }
       } else if (reject) {
         reject({ status: request.status, response: request.response });
-      } else if (confirm("GoatBots Card Watcher hit a server error. Reload?")) {
-        location.reload();
+      } else if (
+        window.confirm("GoatBots Card Watcher hit a server error. Reload?")
+      ) {
+        window.location.reload();
       }
     };
     let form = new FormData();
     if (data) {
-      if (FormData.isPrototypeOf(data)) form = data;
-      else for (let el in data) form.append(el, data[el]);
+      if (Object.prototype.isPrototypeOf.call(FormData, data)) {
+        form = data;
+      } else {
+        for (const el in data) {
+          if (Object.hasOwn(data, el)) {
+            form.append(el, data[el]);
+          }
+        }
+      }
       if (debug) {
         console.log(`GoatBots Card Watcher AJAX: sending data: ${form}`);
       }
@@ -350,24 +384,55 @@ class CardWatcher {
 
   // Invoked when the page finishes loading. Scan for new cards.
   handleEvent() {
-    this.log({ level: 3 }, "GoatBots Card Watcher: loaded");
-    let cardNames = [];
-    let rows = [];
+    this.logger.debug("GoatBots Card Watcher: loaded");
+    const words = [];
+    const cards = [];
+    const pageType = window.location.pathname.split("/")[1];
     // Scan every card in the page's price lists.
-    for (let pricelist of document.querySelectorAll("#main .price-list")) {
-      for (let row of pricelist?.children) {
-        if (row.className === "header") continue;
-        let id = row.dataset.item;
-        let found = id && this.cards?.find(c => c.id === id);
+    for (const pricelist of document.querySelectorAll("#main .price-list")) {
+      for (const row of pricelist.children) {
+        if (row.className === "header") {
+          continue;
+        }
+        const id = row.dataset.item;
+        const found = id && this.cards?.find(c => c.id === id);
         if (found) {
           row.setAttribute("watching", "true");
           // Only handle the card if it's in stock.
-          if (row.querySelector(".stock")?.classList.contains("out")) continue;
-          this.log(
-            { level: 4 },
-            `GoatBots Card Watcher: ${found.name} in stock`
+          if (row.querySelector(".stock")?.classList.contains("out")) {
+            continue;
+          }
+          this.logger.debug(
+            `GoatBots Card Watcher: ${found.name} in stock`,
+            found
           );
-          cardNames.push(found.name);
+          let word;
+          switch (pageType) {
+            case "card":
+              if (!words.length) {
+                words.push(
+                  found.name ??
+                    document
+                      .querySelector("body > main > h1")
+                      ?.innerText?.trim()
+                );
+              }
+              word = `${found.set ?? ""} ${found.frame ?? ""} ${
+                found.details ?? ""
+              }`.trim();
+              break;
+            case "set":
+              word = `${found.frame ?? ""} ${found.name ?? ""} ${
+                found.details ?? ""
+              }`.trim();
+              break;
+            default:
+              word = found.name;
+              break;
+          }
+          if (word) {
+            words.push(word);
+          }
           // If the card isn't already in our cart, add it.
           if (
             row
@@ -376,7 +441,7 @@ class CardWatcher {
           ) {
             continue;
           }
-          rows.push(row);
+          cards.push({ ...found, row });
         }
       }
     }
@@ -388,31 +453,34 @@ class CardWatcher {
     // or starting delivery would fail and cause repeated reloads.
     this.makeRequest({
       url: "/ajax/delivery-status",
-      debug: this.config["Debug log level"] > 1,
       success: data => {
         data = JSON.parse(data);
         if (!data) {
           // If we found cards, start the alert process.
-          if (cardNames.length) {
-            this.addToCart(rows);
+          if (words.length) {
+            this.addToCart(cards);
             if (this.config["Use text-to-speech"] && window.speechSynthesis) {
               // Limit the length of the speech if user chose to.
               let limit = this.config["Limit number of card names to speak"];
-              if (limit && typeof limit === "number") cardNames.splice(limit);
-              this.playSynthAlert(cardNames.join("; "));
+              if (limit && typeof limit === "number") {
+                if (pageType === "card") {
+                  // Don't count the card name for the limit if on a card page.
+                  limit += 1;
+                }
+                words.splice(limit);
+              }
+              this.playSynthAlert(words.join("; "));
             } else {
               this.playVoiceAlert();
             }
             return;
           }
         } else {
-          this.log(
-            { level: 4 },
+          this.logger.debug(
             "GoatBots Card Watcher: delivery active :>> ",
             data.text
           );
-          this.log(
-            { level: 4 },
+          this.logger.debug(
             "GoatBots Card Watcher: delivery hash :>> ",
             data.hash
           );
@@ -425,17 +493,16 @@ class CardWatcher {
 
   // Start the reload timer.
   countdown() {
-    this.log({ level: 3 }, "GoatBots Card Watcher: waiting to reload");
+    this.logger.debug("GoatBots Card Watcher: waiting to reload");
     window.clearTimeout(this.timer);
     this.timer = window.setTimeout(() => {
       // Check delivery status. We don't reload if a delivery is in progress.
       this.makeRequest({
         url: "/ajax/delivery-status",
-        debug: this.config["Debug log level"] > 1,
         success: data => {
           data = JSON.parse(data);
           if (!data) {
-            if (this.path === location.pathname) {
+            if (this.path === window.location.pathname) {
               // Don't reload if the dialog is open or if watching is paused. Also
               // don't reload if the tab is active unless the setting is enabled.
               if (
@@ -445,17 +512,15 @@ class CardWatcher {
               ) {
                 this.countdown();
               } else {
-                location.reload();
+                window.location.reload();
               }
             }
           } else {
-            this.log(
-              { level: 4 },
+            this.logger.debug(
               "GoatBots Card Watcher: delivery active :>> ",
               data.text
             );
-            this.log(
-              { level: 4 },
+            this.logger.debug(
               "GoatBots Card Watcher: delivery hash :>> ",
               data.hash
             );
@@ -472,27 +537,53 @@ class CardWatcher {
    * start delivery automatically. This relies on ajax requests and we can't add
    * multiple items in one request, so we need to iterate over the items, only
    * adding the next item when the current item finishes successfully.
-   * @param {Array} [rows] an array containing all the items to add.
+   * @param {Array} [cards] an array containing all the items to add.
    * @param {Number} [i] the current array index.
    */
-  addToCart(rows = [], i = 0) {
-    let row = rows[i];
+  addToCart(cards = [], i = 0) {
+    const card = cards[i];
+    const row = card?.row;
     // If the current row is valid, add it to cart.
-    if (row !== undefined) {
-      this.log(
-        { level: 3 },
-        `GoatBots Card Watcher: adding ${row
-          .querySelector(".name")
-          ?.innerText?.trim()} to cart`
+    if (card) {
+      this.logger.debug(
+        `GoatBots Card Watcher: adding ${
+          card.wanted ? `${card.wanted}x ` : ""
+        }${card.name} to cart`
       );
-      this.makeRequest({
-        url: "/ajax/delivery-item",
-        data: { item: row.dataset.item },
-        abort: `item${row.dataset.item}`,
-        debug: this.config["Debug log level"] > 1,
-        success: () => this.addToCart(rows, ++i),
-      });
-    } else if (rows.length) {
+      const item = card.id || card?.row.dataset.item;
+      if (item) {
+        this.makeRequest({
+          url: "/ajax/delivery-item",
+          data: { item: row.dataset.item },
+          abort: `item${row.dataset.item}`,
+          success: rv => {
+            if (card.wanted && card.wanted > 1) {
+              // If the card has a wanted value less than the returned quantity,
+              // we need to make the request again until the quantity in cart is
+              // less than or equal to the wanted value set by the user.
+              rv = JSON.parse(rv);
+              if (rv !== null && typeof rv === "object") {
+                if (
+                  typeof rv.quantity === "number" &&
+                  rv.quantity > card.wanted
+                ) {
+                  this.addToCart(cards, i);
+                  return;
+                }
+              }
+            }
+            i += 1;
+            this.addToCart(cards, i);
+          },
+        });
+      } else {
+        this.logger.error(
+          `GoatBots Card Watcher: could not find item id for ${card.name}`
+        );
+        i += 1;
+        this.addToCart(cards, i);
+      }
+    } else if (cards.length) {
       // If the row is undefined, that means either 1) the array was somehow
       // empty from the start, in which case we should do nothing; or 2) we got
       // to the end of the array, meaning we're finished adding items to cart.
@@ -512,7 +603,6 @@ class CardWatcher {
         this.makeRequest({
           url: "/ajax/delivery-start",
           leaving: true,
-          debug: this.config["Debug log level"] > 1,
           success: () => {
             // If the delivery start request succeeds as it should, go the
             // delivery page and save the current URL with the history API so we
@@ -523,28 +613,29 @@ class CardWatcher {
             // to distinguish between the *user* starting delivery manually and
             // the *script* starting delivery automatically. That way we don't
             // screw up the normal usage of GoatBots.
-            history.pushState(
-              { autostart: true, previousURL: location.href },
+            window.history.pushState(
+              { autostart: true, previousURL: window.location.href },
               "",
               "/delivery"
             );
-            location.reload();
+            window.location.reload();
           },
           reject: () => {
-            location.href = "/delivery";
+            window.location.href = "/delivery";
           },
         });
-        this.log({ level: 1 }, "GoatBots Card Watcher: starting delivery");
+        this.logger.info("GoatBots Card Watcher: starting delivery");
       } else {
         // Just go to the delivery page without starting delivery.
-        location.href = "/delivery";
+        window.location.href = "/delivery";
       }
     } else {
-      this.log(
-        {},
-        `GoatBots Card Watcher: waiting for ${this.finishedSpeaking}`
-          ? "items to be added to cart"
-          : "speech/audio to finish"
+      this.logger.info(
+        `GoatBots Card Watcher: waiting for ${
+          this.finishedSpeaking
+            ? "items to be added to cart"
+            : "speech/audio to finish"
+        }`
       );
     }
   }
@@ -555,8 +646,8 @@ class CardWatcher {
    */
   playSynthAlert(words) {
     if (words) {
-      this.log({}, "GoatBots Card Watcher: speech synth startup");
-      let speech = new SpeechSynthesisUtterance();
+      this.logger.debug("GoatBots Card Watcher: speech synth startup");
+      const speech = new SpeechSynthesisUtterance();
       this.voices = window.speechSynthesis.getVoices();
       speech.text = words;
       speech.rate = this.config["Text-to-speech rate"];
@@ -570,21 +661,19 @@ class CardWatcher {
             this.tryDelivery();
             speech.onend = null;
           };
-          this.log(
-            { level: 3 },
+          this.logger.debug(
             "GoatBots Card Watcher: speaking words :>> ",
             words
           );
           this.alertAudio.play();
           window.speechSynthesis.speak(speech);
         } else {
-          this.log({}, "GoatBots Card Watcher: speech synth busy");
+          this.logger.debug("GoatBots Card Watcher: speech synth busy");
         }
         return;
       }
     } else {
-      this.log(
-        { level: 1, mode: "error" },
+      this.logger.error(
         "GoatBots Card Watcher: speech synth sent invalid card names"
       );
     }
@@ -599,7 +688,7 @@ class CardWatcher {
       this.tryDelivery();
       this.voiceAudio.onended = null;
     };
-    this.log({}, "GoatBots Card Watcher: playing audio");
+    this.logger.debug("GoatBots Card Watcher: playing audio");
     this.alertAudio.play();
     this.voiceAudio.play();
   }
@@ -615,30 +704,26 @@ class CardWatcher {
    */
   onValueChange(id, oldValue, newValue, remote) {
     if (oldValue === newValue) return;
-    this.log(
-      { level: 4 },
+    this.logger.debug(
       `GoatBots Card Watcher: setting updated — ${id} :>> `,
       newValue
     );
     this.config[id] = newValue;
-    let menu = document.getElementById("card-watcher-menu");
+    const menu = document.getElementById("card-watcher-menu");
     switch (id) {
       case "Pause watching":
         if (menu) {
-          let label = this.config["Pause watching"]
+          const label = this.config["Pause watching"]
             ? "Resume Watching"
             : "Pause Watching";
-          let item = menu.querySelector("a[href='#pause']");
+          const item = menu.querySelector("a[href='#pause']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
         } else {
-          this.log(
-            { level: 1, mode: "warn" },
-            "GoatBots Card Watcher: menu missing"
-          );
+          this.logger.warn("GoatBots Card Watcher: menu missing");
         }
         if (!remote && !newValue && oldValue && this.cards?.length) {
-          location.reload();
+          window.location.reload();
         }
         GM_unregisterMenuCommand(
           oldValue ? "Resume Watching" : "Pause Watching"
@@ -652,17 +737,14 @@ class CardWatcher {
         break;
       case "Automatically start delivery":
         if (menu) {
-          let label = this.config["Automatically start delivery"]
+          const label = this.config["Automatically start delivery"]
             ? "Disable Automatic Delivery"
             : "Enable Automatic Delivery";
-          let item = menu.querySelector("a[href='#autostart']");
+          const item = menu.querySelector("a[href='#autostart']");
           item.setAttribute("aria-label", label);
           item.textContent = label;
         } else {
-          this.log(
-            { level: 1, mode: "warn" },
-            "GoatBots Card Watcher: menu missing"
-          );
+          this.logger.warn("GoatBots Card Watcher: menu missing");
         }
         GM_unregisterMenuCommand(
           oldValue ? "Disable Automatic Delivery" : "Enable Automatic Delivery"
@@ -677,69 +759,105 @@ class CardWatcher {
     }
   }
 
-  getCardName(row) {
-    let name;
-    if (row.className === "header") return name;
-    let rowName = row.querySelector(".name").innerText?.trim() ?? "";
-    let pageType = location.pathname.split("/")[1];
-    let setName = row
+  pageCanBeWatched() {
+    const path = window.location.pathname.split("/");
+    return (
+      document.querySelector("#main .price-list") &&
+      ["card", "set", "boosters"].includes(path[1]) &&
+      !["treasure-chest-booster", "magic-online-player-reward-pack"].includes(
+        path[2]
+      )
+    );
+  }
+
+  /**
+   * For a given card row, return an object identifying the card.
+   * @param {Element} row The <li> element containing the card.
+   * @returns {{
+   *   name: string,
+   *   id: string, // The card's GoatBots ID.
+   *   set: string, // The set code, usually 3 characters.
+   *   frame: string, // The card style, e.g. "Borderless"
+   *   wanted: number, // The max number of copies to order, or a value less than 1 for no limit.
+   * }}
+   */
+  getCardObject(row) {
+    if (row.className === "header") return null;
+    let item;
+    const id = row.dataset.item;
+    const rowName = row.querySelector(".name").innerText?.trim() ?? "";
+    const pageType = window.location.pathname.split("/")[1];
+    const set = row
       .querySelector(".rarity use")
       ?.getAttribute("href")
       .match(/.svg#cardset-(.*)/)?.[1]
       ?.toUpperCase();
     switch (pageType) {
       case "card": {
-        let pageName =
-          document.querySelector("body > main > h1")?.innerText?.trim() ?? "";
-        name = `${pageName} (${`${setName} ${rowName}`.trim()})`;
+        item = {
+          name:
+            document.querySelector("body > main > h1")?.innerText?.trim() ??
+            "Unknown",
+          id,
+          set,
+          frame: rowName,
+          wanted: -1,
+        };
         break;
       }
       case "set":
       default: {
-        let section = row.parentElement.previousElementSibling;
-        let sectionName =
+        const section = row.parentElement.previousElementSibling;
+        const sectionName =
           (section.classList.contains("next-frame") &&
             section?.innerText?.trim()) ||
           "";
-        let cardType = sectionName?.match(/(.*) Cards/)?.[1]?.trim() ?? "";
-        name = `${rowName} (${`${setName} ${cardType}`.trim()})`;
+        const frame = sectionName?.match(/(.*) Cards/)?.[1]?.trim() ?? "";
+        item = {
+          name: rowName,
+          id,
+          set,
+        };
+        if (frame) item.frame = frame;
+        item.wanted = -1;
         break;
       }
     }
-    return name;
+    return item;
   }
 
   // Open the card list editor dialog.
   editCardListDialog() {
     if (document.querySelector(".card-watcher-dialog")) return;
-    this.log({}, "GoatBots Card Watcher: opening card list editor");
-    let page = this.config.Watchlist.find(
-      page => page.path === location.pathname
+    this.logger.debug("GoatBots Card Watcher: opening card list editor");
+    const page = this.config.Watchlist.find(
+      page => page.path === window.location.pathname
     );
-    let { path, cards } = page ?? { path: location.pathname };
+    const { path, cards } = page ?? { path: window.location.pathname };
 
-    let dialog = document.createElement("dialog");
+    const dialog = document.createElement("dialog");
     dialog.className = "card-watcher-dialog";
     dialog.id = "card-watcher-editor-dialog";
 
     // The DOM menu we created in the navbar. We want to highlight the menu when
     // the dialog is open, like the other GoatBots menus are highlighted.
-    let menu = document.getElementById("card-watcher-menu");
+    const menu = document.getElementById("card-watcher-menu");
 
     // Main text-based dialog.
-    let title = dialog.appendChild(document.createElement("h3"));
+    const title = dialog.appendChild(document.createElement("h3"));
     title.textContent = cards ? "Edit Cards List" : "Add Page to Watchlist";
-    let form = dialog.appendChild(document.createElement("form"));
+    const form = dialog.appendChild(document.createElement("form"));
     form.setAttribute("method", "dialog");
     form.noValidate = true;
 
-    let pathLabel = form.appendChild(document.createElement("label"));
+    const pathLabel = form.appendChild(document.createElement("label"));
     pathLabel.id = "card-watcher-path";
-    let pathTitle = pathLabel.appendChild(document.createElement("span"));
+    const pathTitle = pathLabel.appendChild(document.createElement("span"));
     pathTitle.textContent = "Page path:";
     pathTitle.style.cursor = "help";
-    pathTitle.title = `The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.`;
-    let pathField = document.createElement("input");
+    pathTitle.title =
+      "The path for the page you want to watch. This is everything after the domain. To avoid messing up your normal GoatBots use, add a plus + character to the end of the path. Then the script will only activate on the + version, which you can bookmark.";
+    const pathField = document.createElement("input");
     pathField.required = true;
     pathField.minLength = 2;
     pathField.pattern = "^/.*";
@@ -747,22 +865,30 @@ class CardWatcher {
     pathField.value = path;
     pathLabel.appendChild(pathField);
 
-    let cardsLabel = form.appendChild(document.createElement("label"));
+    const cardsLabel = form.appendChild(document.createElement("label"));
     cardsLabel.id = "card-watcher-cards-list";
-    let cardsTitle = cardsLabel.appendChild(document.createElement("p"));
+    const cardsTitle = cardsLabel.appendChild(document.createElement("p"));
     cardsTitle.textContent = "Cards needed on page:";
-    let cardsField = cardsLabel.appendChild(document.createElement("textarea"));
-    let exampleCard2 = document.querySelector(
+    const cardsField = cardsLabel.appendChild(
+      document.createElement("textarea")
+    );
+    const exampleCard2 = document.querySelector(
       "#main .price-list:last-of-type li[data-item]:last-child"
     );
-    let exampleCard1 = exampleCard2?.previousElementSibling;
-    let exampleCardObj1 = {
-      name: this.getCardName(exampleCard1) || "Example Card #1",
-      id: exampleCard1?.dataset.item || "unique-card-id-1",
+    const exampleCard1 = exampleCard2?.previousElementSibling;
+    const exampleCardObj1 = this.getCardObject(exampleCard1) ?? {
+      name: "Foil Sheoldred",
+      id: "A4zDSnxvn0ziSA==",
+      set: "MOM",
+      frame: "Showcase",
+      wanted: 4,
     };
-    let exampleCardObj2 = {
-      name: this.getCardName(exampleCard2) || "Example Card #2",
-      id: exampleCard2?.dataset.item || "unique-card-id-2",
+    const exampleCardObj2 = this.getCardObject(exampleCard2) ?? {
+      name: "Knight-Errant of Eos",
+      id: "A4zDSnxvnkroQw==",
+      set: "MOM",
+      frame: "Extended Art",
+      wanted: -1,
     };
     cardsField.required = true;
     cardsField.spellcheck = false;
@@ -773,14 +899,14 @@ class CardWatcher {
     )}`;
     if (cards?.length) cardsField.value = JSON.stringify(cards, null, 2);
 
-    let buttonBox = form.appendChild(document.createElement("div"));
+    const buttonBox = form.appendChild(document.createElement("div"));
     buttonBox.className = "button-box";
 
-    let saveBtn = buttonBox.appendChild(document.createElement("button"));
+    const saveBtn = buttonBox.appendChild(document.createElement("button"));
     saveBtn.setAttribute("mode", "list-save");
     saveBtn.textContent = "Save";
 
-    let clickSelectBtn = buttonBox.appendChild(
+    const clickSelectBtn = buttonBox.appendChild(
       document.createElement("button")
     );
     clickSelectBtn.setAttribute("mode", "select");
@@ -793,45 +919,45 @@ class CardWatcher {
       removeBtn.textContent = "Remove Page";
     }
 
-    let cancelBtn = buttonBox.appendChild(document.createElement("button"));
+    const cancelBtn = buttonBox.appendChild(document.createElement("button"));
     cancelBtn.setAttribute("mode", "list-cancel");
     cancelBtn.textContent = "Cancel";
 
     // Click select dialog.
-    let clickSelectTitle = dialog.appendChild(document.createElement("h3"));
+    const clickSelectTitle = dialog.appendChild(document.createElement("h3"));
     clickSelectTitle.style.display = "none";
     clickSelectTitle.textContent = "Select by Clicking";
     clickSelectTitle.style.cursor = "help";
-    clickSelectTitle.title = `Click cards in the price list to add them to the cards list. Cards in the list are highlighted in green, and clicking them will remove them from the cards list.`;
-    let clickSelectForm = dialog.appendChild(document.createElement("form"));
+    clickSelectTitle.title =
+      "Click cards in the price list to add them to the cards list. Cards in the list are highlighted in green, and clicking them will remove them from the cards list.";
+    const clickSelectForm = dialog.appendChild(document.createElement("form"));
     clickSelectForm.setAttribute("method", "dialog");
     clickSelectForm.noValidate = true;
     clickSelectForm.style.display = "none";
 
-    let clickSelectButtonBox = clickSelectForm.appendChild(
+    const clickSelectButtonBox = clickSelectForm.appendChild(
       document.createElement("div")
     );
     clickSelectButtonBox.className = "button-box";
-    let clickSelectConfirmBtn = clickSelectButtonBox.appendChild(
+    const clickSelectConfirmBtn = clickSelectButtonBox.appendChild(
       document.createElement("button")
     );
     clickSelectConfirmBtn.setAttribute("mode", "select-confirm");
     clickSelectConfirmBtn.textContent = "Confirm";
-    let clickSelectCancelBtn = clickSelectButtonBox.appendChild(
+    const clickSelectCancelBtn = clickSelectButtonBox.appendChild(
       document.createElement("button")
     );
     clickSelectCancelBtn.setAttribute("mode", "select-cancel");
     clickSelectCancelBtn.textContent = "Cancel";
 
     // Click handler for click-to-select mode.
-    let clickSelect = e => {
-      let row = e.target.closest("li");
+    const clickSelect = e => {
+      const row = e.target.closest("li");
       if (row && row.className !== "header" && row.dataset.item) {
         e.stopImmediatePropagation();
         e.stopPropagation();
         e.preventDefault();
-        this.log(
-          { level: 3 },
+        this.logger.debug(
           "GoatBots Card Watcher: card row selected by click :>> ",
           row
         );
@@ -846,23 +972,22 @@ class CardWatcher {
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        {},
+      this.logger.debug(
         "GoatBots Card Watcher: form submission :>> ",
         e.submitter.getAttribute("mode")
       );
       switch (e.submitter) {
         case saveBtn: {
           // Save the current values.
-          let path = pathField.value.trim();
-          let cardsValue = cardsField.value;
+          const path = pathField.value.trim();
+          const cardsValue = cardsField.value;
           let cards = [];
           try {
             cards = JSON.parse(cardsValue);
           } catch (error) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid JSON"
+            this.logger.error(
+              "GoatBots Card Watcher: invalid JSON :>> ",
+              error
             );
           }
           // Check that the inputs are valid, and if not, dispatch a
@@ -875,10 +1000,7 @@ class CardWatcher {
           pathField.title = `/${path}`;
           if (!cards.length) cardsField.value = "";
           if (!form.checkValidity()) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid input"
-            );
+            this.logger.error("GoatBots Card Watcher: invalid input");
             form.reportValidity();
             pathField.removeAttribute("title");
             cardsField.value = cardsValue;
@@ -904,8 +1026,8 @@ class CardWatcher {
           // If the user modified the path field such that it no longer matches
           // the current page URL, navigate to the new path to begin watching.
           // Otherwise just reload, so we don't lose scroll position.
-          if (location.pathname === path) location.reload();
-          else location.href = path;
+          if (window.location.pathname === path) window.location.reload();
+          else window.location.href = path;
           return;
         }
         case clickSelectBtn: {
@@ -913,24 +1035,22 @@ class CardWatcher {
           document
             .querySelector("#main")
             ?.addEventListener("click", clickSelect, true);
-          form.style.display = title.style.display = "none";
+          form.style.display = "none";
+          title.style.display = "none";
           clickSelectForm.style.removeProperty("display");
           clickSelectTitle.style.removeProperty("display");
           let cards = [];
           try {
             cards = JSON.parse(cardsField.value);
           } catch (error) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid JSON"
-            );
+            this.logger.warn("GoatBots Card Watcher: invalid JSON :>> ", error);
           }
-          for (let pricelist of document.querySelectorAll(
+          for (const pricelist of document.querySelectorAll(
             "#main .price-list"
           )) {
-            for (let row of pricelist?.children) {
+            for (const row of pricelist.children) {
               if (row.className === "header") continue;
-              let id = row.dataset.item;
+              const id = row.dataset.item;
               if (id && cards.find(c => c.id === id)) {
                 row.setAttribute("watching", "true");
               } else {
@@ -946,12 +1066,12 @@ class CardWatcher {
           return;
         }
         case cancelBtn:
-          for (let pricelist of document.querySelectorAll(
+          for (const pricelist of document.querySelectorAll(
             "#main .price-list"
           )) {
-            for (let row of pricelist?.children) {
+            for (const row of pricelist.children) {
               if (row.className === "header") continue;
-              let id = row.dataset.item;
+              const id = row.dataset.item;
               if (id && this.cards?.find(c => c.id === id)) {
                 row.setAttribute("watching", "true");
               } else {
@@ -973,39 +1093,37 @@ class CardWatcher {
     // Click-to-select form submission handler.
     clickSelectForm.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        {},
+      this.logger.debug(
         "GoatBots Card Watcher: form submission :>> ",
         e.submitter.getAttribute("mode")
       );
       switch (e.submitter) {
         case clickSelectConfirmBtn: {
           // Add the selected cards to the card list field
-          let selectedCards = [];
+          const selectedCards = [];
           let currentCards = [];
           try {
             currentCards = JSON.parse(cardsField.value);
           } catch (error) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid JSON"
-            );
+            this.logger.warn("GoatBots Card Watcher: invalid JSON :>> ", error);
           }
-          for (let pricelist of document.querySelectorAll(
+          for (const pricelist of document.querySelectorAll(
             "#main .price-list"
           )) {
-            for (let row of pricelist?.children) {
+            for (const row of pricelist.children) {
               if (row.className !== "header" && row.hasAttribute("watching")) {
-                let id = row.dataset.item;
+                const id = row.dataset.item;
                 if (!id) {
+                  this.logger.error(
+                    "GoatBots Card Watcher: missing data-item attribute :>> ",
+                    row
+                  );
                   row.removeAttribute("watching");
                   continue;
                 }
-                let card = currentCards.find(c => c.id === id) || { id };
-                let name = card.name || this.getCardName(row);
-                if (name) {
-                  card.name = name;
-                }
+                const card =
+                  currentCards.find(c => c.id === id) ||
+                  this.getCardObject(row);
                 selectedCards.push(card);
               }
             }
@@ -1015,26 +1133,23 @@ class CardWatcher {
             : "";
           break;
         }
-        default:
-        // fall through
         case clickSelectCancelBtn:
+        // fall through
+        default: {
           // Unmark the selected cards and don't add them to the list.
           let currentCards = [];
           try {
             currentCards = JSON.parse(cardsField.value);
           } catch (error) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid JSON"
-            );
+            this.logger.warn("GoatBots Card Watcher: invalid JSON :>> ", error);
           }
-          for (let pricelist of document.querySelectorAll(
+          for (const pricelist of document.querySelectorAll(
             "#main .price-list"
           )) {
-            for (let row of pricelist?.children) {
+            for (const row of pricelist.children) {
               if (row.className === "header") continue;
-              let id = row.dataset.item;
-              let found = id && currentCards.find(c => c.id === id);
+              const id = row.dataset.item;
+              const found = id && currentCards.find(c => c.id === id);
               if (found) {
                 row.setAttribute("watching", "true");
               } else {
@@ -1043,11 +1158,13 @@ class CardWatcher {
             }
           }
           break;
+        }
       }
       document
         .querySelector("#main")
         ?.removeEventListener("click", clickSelect, true);
-      clickSelectForm.style.display = clickSelectTitle.style.display = "none";
+      clickSelectForm.style.display = "none";
+      clickSelectTitle.style.display = "none";
       form.style.removeProperty("display");
       title.style.removeProperty("display");
     };
@@ -1063,34 +1180,37 @@ class CardWatcher {
   // Open the advanced settings dialog.
   advancedDialog() {
     if (document.querySelector(".card-watcher-dialog")) return;
-    this.log({}, "GoatBots Card Watcher: opening advanced settings dialog");
+    this.logger.debug(
+      "GoatBots Card Watcher: opening advanced settings dialog"
+    );
 
-    let dialog = document.createElement("dialog");
+    const dialog = document.createElement("dialog");
     dialog.className = "card-watcher-dialog";
     dialog.id = "card-watcher-advanced-dialog";
 
     // The DOM menu we created in the navbar. We want to highlight the menu when
     // the dialog is open, like the other GoatBots menus are highlighted.
-    let menu = document.getElementById("card-watcher-menu");
+    const menu = document.getElementById("card-watcher-menu");
 
     // Main text-based dialog.
-    let title = dialog.appendChild(document.createElement("h3"));
+    const title = dialog.appendChild(document.createElement("h3"));
     title.textContent = "Advanced Settings";
-    let form = dialog.appendChild(document.createElement("form"));
+    const form = dialog.appendChild(document.createElement("form"));
     form.setAttribute("method", "dialog");
     form.noValidate = true;
 
-    let refreshIntervalLabel = form.appendChild(
+    const refreshIntervalLabel = form.appendChild(
       document.createElement("label")
     );
     refreshIntervalLabel.id = "card-watcher-refresh-interval";
-    let refreshIntervalTitle = refreshIntervalLabel.appendChild(
+    const refreshIntervalTitle = refreshIntervalLabel.appendChild(
       document.createElement("span")
     );
     refreshIntervalTitle.textContent = "Refresh interval:";
     refreshIntervalTitle.style.cursor = "help";
-    refreshIntervalTitle.title = `How often to refresh the page to check stock, in milliseconds. This should be set to at least the average page load time. If it normally takes 2 seconds for the page to finish loading (as indicated by a loading icon in your browser, etc.), then you don't want to set this to less than 2000.`;
-    let refreshIntervalField = document.createElement("input");
+    refreshIntervalTitle.title =
+      "How often to refresh the page to check stock, in milliseconds. This should be set to at least the average page load time. If it normally takes 2 seconds for the page to finish loading (as indicated by a loading icon in your browser, etc.), then you don't want to set this to less than 2000.";
+    const refreshIntervalField = document.createElement("input");
     refreshIntervalField.type = "number";
     refreshIntervalField.required = true;
     refreshIntervalField.step = 1000;
@@ -1100,39 +1220,44 @@ class CardWatcher {
     refreshIntervalField.value = this.config["Refresh interval"];
     refreshIntervalLabel.appendChild(refreshIntervalField);
 
-    let activeRefreshLabel = form.appendChild(document.createElement("label"));
+    const activeRefreshLabel = form.appendChild(
+      document.createElement("label")
+    );
     activeRefreshLabel.id = "card-watcher-active-refresh";
-    let activeRefreshTitle = activeRefreshLabel.appendChild(
+    const activeRefreshTitle = activeRefreshLabel.appendChild(
       document.createElement("span")
     );
     activeRefreshTitle.textContent = "Refresh while active:";
     activeRefreshTitle.style.cursor = "help";
-    activeRefreshTitle.title = `By default, the page will only refresh when the tab is in the background (i.e., you have a different tab focused). This way you can still use the page normally if you want to. But if you use windows instead of tabs, so that your GoatBots tab is always visible, you should check this box.`;
-    let activeRefreshField = document.createElement("input");
+    activeRefreshTitle.title =
+      "By default, the page will only refresh when the tab is in the background (i.e., you have a different tab focused). This way you can still use the page normally if you want to. But if you use windows instead of tabs, so that your GoatBots tab is always visible, you should check this box.";
+    const activeRefreshField = document.createElement("input");
     activeRefreshField.type = "checkbox";
     activeRefreshField.checked = !!this.config["Refresh while active"];
     activeRefreshLabel.appendChild(activeRefreshField);
 
-    let TTSLabel = form.appendChild(document.createElement("label"));
+    const TTSLabel = form.appendChild(document.createElement("label"));
     TTSLabel.id = "card-watcher-use-tts";
-    let TTSTitle = TTSLabel.appendChild(document.createElement("span"));
+    const TTSTitle = TTSLabel.appendChild(document.createElement("span"));
     TTSTitle.textContent = "Use text-to-speech:";
     TTSTitle.style.cursor = "help";
-    TTSTitle.title = `By default, the alert will convert the names of the new cards to audible speech. You can disable text-to-speech by unchecking this box. In that case, it will use a fallback voice audio file.`;
-    let TTSField = document.createElement("input");
+    TTSTitle.title =
+      "By default, the alert will convert the names of the new cards to audible speech. You can disable text-to-speech by unchecking this box. In that case, it will use a fallback voice audio file.";
+    const TTSField = document.createElement("input");
     TTSField.type = "checkbox";
     TTSField.checked = !!this.config["Use text-to-speech"];
     TTSLabel.appendChild(TTSField);
 
-    let cardLimitLabel = form.appendChild(document.createElement("label"));
+    const cardLimitLabel = form.appendChild(document.createElement("label"));
     cardLimitLabel.id = "card-watcher-card-limit";
-    let cardLimitTitle = cardLimitLabel.appendChild(
+    const cardLimitTitle = cardLimitLabel.appendChild(
       document.createElement("span")
     );
     cardLimitTitle.textContent = "Limit number of card names to speak:";
     cardLimitTitle.style.cursor = "help";
-    cardLimitTitle.title = `If there are many cards to add to the cart, saying all their names out loud might be very slow. And we wait for speech to finish before starting delivery, since starting delivery will stop the speech. So if it has to say 10 names, that could mean 20-30 seconds before we initiate delivery. And that means someone else might initiate delivery on one of the desired items first. So this optional setting allows you to put a cap on the number of names spoken. If you set this to 0, then there is no limit. Any positive integer will set a proper limit. I personally set this to 3.`;
-    let cardLimitField = document.createElement("input");
+    cardLimitTitle.title =
+      "If there are many cards to add to the cart, saying all their names out loud might be very slow. And we wait for speech to finish before starting delivery, since starting delivery will stop the speech. So if it has to say 10 names, that could mean 20-30 seconds before we initiate delivery. And that means someone else might initiate delivery on one of the desired items first. So this optional setting allows you to put a cap on the number of names spoken. If you set this to 0, then there is no limit. Any positive integer will set a proper limit. I personally set this to 3.";
+    const cardLimitField = document.createElement("input");
     cardLimitField.type = "number";
     cardLimitField.required = true;
     cardLimitField.min = 0;
@@ -1142,15 +1267,16 @@ class CardWatcher {
     cardLimitField.value = this.config["Limit number of card names to speak"];
     cardLimitLabel.appendChild(cardLimitField);
 
-    let speechRateLabel = form.appendChild(document.createElement("label"));
+    const speechRateLabel = form.appendChild(document.createElement("label"));
     speechRateLabel.id = "card-watcher-speech-rate";
-    let speechRateTitle = speechRateLabel.appendChild(
+    const speechRateTitle = speechRateLabel.appendChild(
       document.createElement("span")
     );
     speechRateTitle.textContent = "Text-to-speech rate:";
     speechRateTitle.style.cursor = "help";
-    speechRateTitle.title = `How fast should the speech play? The value can range between 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the current platform or voice, which should correspond to a normal speaking rate. Other values act as a percentage relative to this, so for example 2 is twice as fast, 0.5 is half as fast, etc. I prefer 1.1 since the default voice on my computer (Windows 10) is kinda slow. Also, the script doesn't navigate to the delivery page until the voice alert has finished. So, a slower voice rate might mean a longer delay in starting delivery.`;
-    let speechRateField = document.createElement("input");
+    speechRateTitle.title =
+      "How fast should the speech play? The value can range between 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the current platform or voice, which should correspond to a normal speaking rate. Other values act as a percentage relative to this, so for example 2 is twice as fast, 0.5 is half as fast, etc. I prefer 1.1 since the default voice on my computer (Windows 10) is kinda slow. Also, the script doesn't navigate to the delivery page until the voice alert has finished. So, a slower voice rate might mean a longer delay in starting delivery.";
+    const speechRateField = document.createElement("input");
     speechRateField.type = "number";
     speechRateField.required = true;
     speechRateField.step = "any";
@@ -1161,40 +1287,41 @@ class CardWatcher {
     speechRateLabel.appendChild(speechRateField);
 
     // Debug log level
-    let logLevelLabel = form.appendChild(document.createElement("label"));
+    const logLevelLabel = form.appendChild(document.createElement("label"));
     logLevelLabel.id = "card-watcher-log-level";
-    let logLevelTitle = logLevelLabel.appendChild(
+    const logLevelTitle = logLevelLabel.appendChild(
       document.createElement("span")
     );
     logLevelTitle.textContent = "Debug log level:";
     logLevelTitle.style.cursor = "help";
-    logLevelTitle.title = `An integer between 0 and 4. At the default level 0, we won't log anything to the console except for errors. At level 1, major debug messages will be logged. At level 2, less significant messages. And so on. The max value 4 will log everything. If you need my help troubleshooting something, set this to 4, try to reproduce the bug, and then copy the contents of your console and send it to me.`;
-    let logLevelField = document.createElement("input");
-    logLevelField.type = "number";
+    logLevelTitle.title =
+      "An integer between 0 and 4. At the default level 0, we won't log anything to the console except for errors. At level 1, major debug messages will be logged. At level 2, less significant messages. And so on. The max value 4 will log everything. If you need my help troubleshooting something, set this to 4, try to reproduce the bug, and then copy the contents of your console and send it to me.";
+    const logLevelField = document.createElement("select");
+    for (const level of Object.keys(this.LOG_LEVELS)) {
+      const option = document.createElement("option");
+      option.value = level;
+      option.textContent = level;
+      logLevelField.appendChild(option);
+    }
     logLevelField.required = true;
-    logLevelField.step = 1;
-    logLevelField.min = 0;
-    logLevelField.max = 4;
-    logLevelField.placeholder = this.defaults["Debug log level"];
     logLevelField.value = this.config["Debug log level"];
     logLevelLabel.appendChild(logLevelField);
 
-    let buttonBox = form.appendChild(document.createElement("div"));
+    const buttonBox = form.appendChild(document.createElement("div"));
     buttonBox.className = "button-box";
 
-    let saveBtn = buttonBox.appendChild(document.createElement("button"));
+    const saveBtn = buttonBox.appendChild(document.createElement("button"));
     saveBtn.setAttribute("mode", "advanced-save");
     saveBtn.textContent = "Save";
 
-    let cancelBtn = buttonBox.appendChild(document.createElement("button"));
+    const cancelBtn = buttonBox.appendChild(document.createElement("button"));
     cancelBtn.setAttribute("mode", "advanced-cancel");
     cancelBtn.textContent = "Cancel";
 
     // Main form submission handler.
     form.onsubmit = e => {
       e.preventDefault();
-      this.log(
-        {},
+      this.logger.debug(
         "GoatBots Card Watcher: form submission :>> ",
         e.submitter.getAttribute("mode")
       );
@@ -1203,10 +1330,7 @@ class CardWatcher {
           // Check that the user's inputs are all valid, and if not, dispatch a
           // notification to the user through generic web API.
           if (!form.checkValidity()) {
-            this.log(
-              { level: 3, mode: "warn" },
-              "GoatBots Card Watcher: invalid input"
-            );
+            this.logger.error("GoatBots Card Watcher: invalid input");
             form.reportValidity();
             return;
           }
@@ -1225,7 +1349,7 @@ class CardWatcher {
             "Text-to-speech rate",
             Number(speechRateField.value.trim())
           );
-          GM_setValue("Debug log level", Number(logLevelField.value.trim()));
+          GM_setValue("Debug log level", logLevelField.value);
           break;
         }
         case cancelBtn:
@@ -1250,24 +1374,21 @@ class CardWatcher {
 
   // Delete the current page from the watchlist.
   removeFromWatchlist() {
-    this.log({ level: 3 }, "GoatBots Card Watcher: remove from watchlist?");
-    let idx = this.config.Watchlist.findIndex(
-      page => page.path === location.pathname
+    this.logger.debug("GoatBots Card Watcher: remove from watchlist?");
+    const idx = this.config.Watchlist.findIndex(
+      page => page.path === window.location.pathname
     );
     if (idx !== -1) {
       // Ask the user to confirm so they don't lose data.
       if (
-        confirm(
-          `Are you sure you want to remove ${location.pathname} from the watchlist?`
+        window.confirm(
+          `Are you sure you want to remove ${window.location.pathname} from the watchlist?`
         )
       ) {
-        this.log(
-          { level: 3 },
-          "GoatBots Card Watcher: yes, remove from watchlist"
-        );
+        this.logger.debug("GoatBots Card Watcher: yes, remove from watchlist");
         this.config.Watchlist.splice(idx, 1);
         GM_setValue("Watchlist", this.config.Watchlist);
-        location.reload();
+        window.location.reload();
       }
     }
   }
@@ -1277,29 +1398,28 @@ class CardWatcher {
    * @param {Boolean} [handling] whether the current page is being watched.
    */
   createMenu(handling = false) {
-    let nav = document.querySelector("nav");
+    const nav = document.querySelector("nav");
     if (!nav || nav.querySelector("ul > li#card-watcher-menu")) return;
-    this.log({ level: 4 }, "GoatBots Card Watcher: creating the DOM menu");
-    let ul = nav.querySelector("ul");
-    let menu = ul.children[3].cloneNode(true);
+    this.logger.debug("GoatBots Card Watcher: creating the DOM menu");
+    const ul = nav.querySelector("ul");
+    const menu = ul.children[3].cloneNode(true);
     menu.id = "card-watcher-menu";
-    let label = menu.firstElementChild;
+    const label = menu.firstElementChild;
     label.dataset.submenu = "cardwatcher";
     label.classList.remove("active");
     label.setAttribute("href", "#cardwatcher");
     label.setAttribute("aria-label", "Card Watcher menu");
-    label.firstChild.textContent = `\nCard Watcher\n`;
-    let submenu = menu.lastElementChild;
+    label.firstChild.textContent = "\nCard Watcher\n";
+    const submenu = menu.lastElementChild;
     submenu.id = "submenu-cardwatcher";
 
     document.body.addEventListener("keydown", e => {
       if (e.code === "Enter") {
-        let item = document
+        const item = document
           .getElementById("card-watcher-menu")
           .querySelector("li.selected");
         if (item) {
-          this.log(
-            {},
+          this.logger.debug(
             "GoatBots Card Watcher: overriding Enter key behavior for our menu items"
           );
           e.preventDefault();
@@ -1310,17 +1430,17 @@ class CardWatcher {
       }
     });
 
-    let items = [];
+    const items = [];
     // for (let item of submenu.firstElementChild.children) items.push(item.firstElementChild);
-    let submenuList = submenu.firstElementChild;
+    const submenuList = submenu.firstElementChild;
     for (let i = 0; i < 5; i++) {
-      let li =
+      const li =
         submenuList.children[i] ?? submenuList.children[i - 1].cloneNode(true);
       items.push(li.firstElementChild);
     }
 
-    if (document.querySelector("#main .price-list")) {
-      let label0 = handling ? "Edit Cards List" : "Add Page to Watchlist";
+    if (this.pageCanBeWatched()) {
+      const label0 = handling ? "Edit Cards List" : "Add Page to Watchlist";
       items[0].setAttribute("aria-label", label0);
       items[0].textContent = label0;
       items[0].setAttribute("href", "#cardlist");
@@ -1331,7 +1451,7 @@ class CardWatcher {
     }
 
     if (handling) {
-      let label1 = "Remove Page from Watchlist";
+      const label1 = "Remove Page from Watchlist";
       items[1].setAttribute("aria-label", label1);
       items[1].textContent = label1;
       items[1].setAttribute("href", "#remove");
@@ -1341,7 +1461,7 @@ class CardWatcher {
       items[1].parentElement.remove();
     }
 
-    let label2 = this.config["Pause watching"]
+    const label2 = this.config["Pause watching"]
       ? "Resume Watching"
       : "Pause Watching";
     items[2].setAttribute("aria-label", label2);
@@ -1352,7 +1472,7 @@ class CardWatcher {
       GM_setValue("Pause watching", !this.config["Pause watching"])
     );
 
-    let label3 = this.config["Automatically start delivery"]
+    const label3 = this.config["Automatically start delivery"]
       ? "Disable Automatic Delivery"
       : "Enable Automatic Delivery";
     items[3].setAttribute("aria-label", label3);
@@ -1366,7 +1486,7 @@ class CardWatcher {
       )
     );
 
-    let label4 = "Advanced Settings";
+    const label4 = "Advanced Settings";
     items[4].setAttribute("aria-label", label4);
     items[4].textContent = label4;
     items[4].setAttribute("href", "#advancedsettings");
@@ -1378,6 +1498,22 @@ class CardWatcher {
 
     ul.children[3].after(menu);
   }
+
+  /**
+   * @typedef {Object} Card
+   * @property {string} name The name of the card, e.g. "Lightning Bolt"
+   * @property {string} id The GoatBots ID of the card, e.g. "A4zDSnxvlEjn"
+   * @property {string} [set] The set code, usually 3 characters.
+   * @property {string} [frame] The card style, e.g. "Borderless"
+   * @property {number} [wanted] The max number of copies to order, or a
+   *   value less than 1 for no limit.
+   */
+
+  /**
+   * @typedef {Object} Page
+   * @property {string} path The pathname of the GoatBots page to watch.
+   * @property {Card[]} cards The cards to scan for on the page.
+   */
 
   /* These are the default config values. There's some additional detail on the
    * settings in the code comments below. I don't recommend editing this
@@ -1391,17 +1527,17 @@ class CardWatcher {
      * Therefore, each member should have a path property and a cards property.
      * The path property's value should be a valid GoatBots page pathname, and
      * the cards property's value should be an array of cards to scan for on
-     * that page. Each card should be an object with a name property and an id
-     * property. The name can be whatever you want, and will be spoken aloud if
-     * the card is found. The id should be the GoatBots card ID, which you can
-     * find in the DOM or by using the Select by Clicking button.
+     * that page. Each card should be an object with at least a name property
+     * and an id property. The name can be whatever you want, and will be spoken
+     * aloud if the card is found. The id should be the GoatBots card ID, which
+     * you can find in the DOM or by using the Select by Clicking button.
      *
-     * For the path value, add the pathname for the GoatBots URL you want to
-     * watch. In this example, I want to watch the 2X2 promos page,
-     * https://www.goatbots.com/set/promotional-double-masters-2022+
-     * I add + at the end so I can use the page normally without it constantly
-     * refreshing the page. So I need to remove the protocol and domain
-     * https://www.goatbots.com and I get /set/promotional-double-masters-2022+
+     * For the path value, enter the GoatBots URL you want to watch into your
+     * address bar. In this example, I want to watch the 2X2 promos page,
+     * https://www.goatbots.com/set/promotional-march-of-the-machine+ I add + at
+     * the end so I can use the page normally without it constantly refreshing
+     * the page. So I visit that page and under the Card Watcher tab at the top,
+     * I click "Add Page to Watchlist".
      *
      * Any GoatBots page with the usual row layout should work. For example, you
      * can add paths like /card/plains if you want to scan for a specific Plains
@@ -1409,83 +1545,95 @@ class CardWatcher {
      * for "Modern Horizons 2 Booster" - of course, these boosters are always in
      * stock, so that would be pointless. But you can add nearly any path.
      *
-     * If you're unsure, you can easily get the exact pathname by navigating to
-     * the page, opening the devtools console, and typing location.pathname and
-     * hitting enter. The returned value is the pathname. Then just add a + if
-     * you want to be able to use the page normally. Then, when you navigate to
-     * that page (with the + added), the Card Watcher will start scanning for
-     * the cards you define in the cards array.
-     *
      * In the cards array, add the cards you want to get an alert for. These
      * need to be exact, so using the "Select by Clicking" button is highly
      * recommended. */
 
-    /**
-     * @typedef {Array<{
-     *  path: string;
-     *  cards: { name?: string; id: string }[];
-     * }>} Watchlist
-     */
+    /** @type {Page[]} */
     Watchlist: [
       /* This is just an example. We're watching the page for MOM promos, and
        * we're scanning *that particular page* with *that exact path* for all
-       * the Showcase variants of the Phyrexian Praetors. If you navigate to the
-       * MOM promos page as normal, this won't activate, because that page
-       * doesn't have a + at the end of the URL. If you add a + to the end of
-       * the URL, then it will start watching the page. Moreover, if the script
-       * found the same cards on a different page, it would do nothing. It's
-       * only searching for these cards on this specific page with this exact
-       * path. So you can think of each of these objects as a path-cards pair.
-       * You'd set this kind of special path so you can still browse the site as
-       * normal, without the script interrupting what you're doing. */
+       * the following cards. If you navigate to the MOM promos page as normal,
+       * this won't activate, because that page doesn't have a + at the end of
+       * the URL. If you add a + to the end of the URL, then it will start
+       * watching the page. Moreover, if the script found the same cards on a
+       * different page, it would do nothing. It's only searching for these
+       * cards on this specific page with this exact path. So you can think of
+       * each of these objects as a path-cards pair. You'd set this kind of
+       * special path so you can still browse the site as normal, without the
+       * script interrupting what you're doing. */
+      /** @type {Page} */
       {
         path: "/set/promotional-march-of-the-machine+",
         cards: [
           {
-            id: "A4zDSnxvnkrkSg==",
-            name: "Sheoldred (MOM Showcase)",
+            name: "Atraxa, Grand Unifier",
+            id: "A4zDSnxvkUrgTA==",
+            set: "ONE",
+            frame: "Showcase",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkrkSA==",
-            name: "Urabrask (MOM Showcase)",
+            name: "Elesh Norn, Mother of Machines",
+            id: "A4zDSnxvnk3mQw==",
+            set: "ONE",
+            frame: "Phyrexian",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkrjTw==",
-            name: "Elesh Norn (MOM Showcase)",
+            name: "Blackcleave Cliffs",
+            id: "A4zDSnxvkUrjTw==",
+            set: "ONE",
+            frame: "Borderless",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkrkTg==",
-            name: "Vorinclex (MOM Showcase)",
+            name: "Soulless Jailer",
+            id: "A4zDSnxvkUrmSA==",
+            set: "ONE",
+            frame: "Extended Art",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkrjTQ==",
-            name: "Jin-Gitaxias (MOM Showcase)",
+            name: "Annex Sentry",
+            id: "A4zDSnxvnk3mSg==",
+            set: "ONE",
+            frame: "Regular Frame",
+            wanted: -1,
           },
         ],
       },
 
       {
-        path: "/card/sheoldred+",
+        path: "/card/lightning-bolt+",
         cards: [
           {
-            id: "A4zDSnxvn0ziSA==",
-            name: "Sheoldred (MOM Foil Showcase)",
+            name: "Lightning Bolt",
+            id: "A4zDSnxslkToTg==",
+            set: "PRM",
+            frame: "Textless",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkrkSg==",
-            name: "Sheoldred (MOM Showcase)",
+            name: "Lightning Bolt",
+            id: "A4zDSnxukEXlSQ==",
+            set: "STA",
+            frame: "Showcase",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkroSQ==",
-            name: "Sheoldred (MOM Borderless)",
+            name: "Lightning Bolt",
+            id: "A4zDSnxvlUzpTw==",
+            set: "PRM",
+            frame: "Borderless",
+            wanted: -1,
           },
           {
-            id: "A4zDSnxvnkjmQg==",
-            name: "Sheoldred (MOM Regular)",
-          },
-          {
-            id: "A4zDSnxvnkTlSg==",
-            name: "Sheoldred (MOM Foil)",
+            name: "Lightning Bolt",
+            id: "A4zDSnxslETlSA==",
+            set: "TD0",
+            frame: "Regular",
+            wanted: -1,
           },
         ],
       },
@@ -1493,6 +1641,7 @@ class CardWatcher {
 
     // This is just used to define a user setting that we'll use to pause/resume
     // the script's normal watching and reloading behavior.
+    /** @type {boolean} */
     "Pause watching": false,
 
     // When we detect new cards on the list, we automatically navigate to the
@@ -1515,6 +1664,7 @@ class CardWatcher {
     // else who's trying to buy the same cards and actually IS present.
     // Consequently, this setting is disabled by default. I don't want people to
     // be using it by accident, or using it without reading this, frankly.
+    /** @type {boolean} */
     "Automatically start delivery": false,
 
     // How often to refresh the page to check stock, in milliseconds. This is
@@ -1522,17 +1672,20 @@ class CardWatcher {
     // page load time. If it normally takes 2 seconds for the page to finish
     // loading (as indicated by a loading icon in your browser, etc.), then you
     // don't want to set this to less than 2 seconds.
+    /** @type {number} */
     "Refresh interval": 10000,
 
     // By default, the page will only refresh when the tab is in the background
     // (i.e., you have a different tab focused). This way you can still use the
     // page normally if you want to. But if you use windows instead of tabs, so
     // that your GoatBots tab is always visible, you should set this to true.
+    /** @type {boolean} */
     "Refresh while active": false,
 
     // By default, the alert will convert the names of the new cards to audible
     // speech. You can disable text-to-speech by setting this to false. In that
     // case, it will use the fallback voice audio file defined at the bottom.
+    /** @type {boolean} */
     "Use text-to-speech": true,
 
     // If there are many cards to add to the cart, saying all their names out
@@ -1544,6 +1697,7 @@ class CardWatcher {
     // number of names spoken. If this setting is falsy (that means any of
     // false, 0, "", null, undefined), then there is no limit. Any positive
     // integer will set a proper limit. I personally set this to 3.
+    /** @type {number} */
     "Limit number of card names to speak": 0,
 
     // How fast should the text-to-speech voice be? The value can range between
@@ -1554,15 +1708,19 @@ class CardWatcher {
     // default voice on my computer (Windows 10) is kinda slow. Also, the script
     // doesn't navigate to the delivery page until the voice alert has finished.
     // So, a slower voice rate might mean a longer delay in starting delivery.
+    /** @type {number} */
     "Text-to-speech rate": 1.1,
 
-    // An integer between 0 and 4. At the default, level 0, we won't log
-    // anything (except maybe some important errors) to the console. At level 1,
-    // major debug messages will be logged. At level 2, less significant
-    // messages. And so on. The max value 4 will log everything. If you need my
-    // help troubleshooting something, set this to 4, try to reproduce the bug,
-    // and then copy the contents of your console and send it to me.
-    "Debug log level": 0,
+    // One of these values: [ "off", "error", "warn", "info", "debug", "all" ]
+    // At the default, "off", we won't log anything to the console. At "error",
+    // major errors will be logged. At "warn", less significant issues will be
+    // logged as well. At "info", major events that are not errors will also be
+    // logged. At "debug" and "all", everything will be logged. These values are
+    // intended for me to use in development. If you need my help
+    // troubleshooting something, set this to "all", try to reproduce the bug,
+    // and then copy the contents of your devtools console and send it to me.
+    /** @type {"off"|"error"|"warn"|"info"|"debug"|"all"} */
+    "Debug log level": "off",
   };
 
   css = /* css */ `.price-list > li[watching] > a {
@@ -1659,6 +1817,9 @@ class CardWatcher {
   background-size: contain;
   background-position: center;
 }
+.card-watcher-dialog select {
+  background-position-x: calc(100% - .6em);
+}
 .card-watcher-dialog .button-box {
   width: 100%;
   display: flex;
@@ -1711,12 +1872,14 @@ class CardWatcher {
     // https://codepen.io/xewl/pen/NjyRJx
     // By default, it says "new cards available" in a male English voice.
     // Make sure the string is wrapped in backticks `like this`
-    "Voice audio file": `SUQzAwAAAAAfdlRFTkMAAAATAAAB//5MAGEAbQBlACAATQBQADMAVExBTgAAABcAAAH//lUAUwAgAEUAbgBnAGwAaQBzAGgAVEFMQgAAAD0AAAH//kMAcgBlAGEAdABlAGQAOgAgADcALwA2AC8AMgAwADIAMgAgADEAMAA6ADEANAA6ADEANAAgAFAATQBUUEUxAAAAMQAAAf/+VABlAHgAdABBAGwAbwB1AGQAOgAgAEkAVgBPAE4AQQAgAEoAbwBlAHkAMgAyAENPTU0AAAAyAAABZW5nAAD//mgAdAB0AHAAOgAvAC8AdwB3AHcALgBuAGUAeAB0AHUAcAAuAGMAbwBtAFRDT04AAAAPAAAB//5TAHAAZQBlAGMAaABUSVQyAAAAGwAAAf/+NgA2ADkAMAAzADMAOAAwAC4AbQBwADMAVFlFUgAAAAsAAAH//jIAMAAyADIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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`,
+    "Voice audio file":
+      "SUQzAwAAAAAfdlRFTkMAAAATAAAB//5MAGEAbQBlACAATQBQADMAVExBTgAAABcAAAH//lUAUwAgAEUAbgBnAGwAaQBzAGgAVEFMQgAAAD0AAAH//kMAcgBlAGEAdABlAGQAOgAgADcALwA2AC8AMgAwADIAMgAgADEAMAA6ADEANAA6ADEANAAgAFAATQBUUEUxAAAAMQAAAf/+VABlAHgAdABBAGwAbwB1AGQAOgAgAEkAVgBPAE4AQQAgAEoAbwBlAHkAMgAyAENPTU0AAAAyAAABZW5nAAD//mgAdAB0AHAAOgAvAC8AdwB3AHcALgBuAGUAeAB0AHUAcAAuAGMAbwBtAFRDT04AAAAPAAAB//5TAHAAZQBlAGMAaABUSVQyAAAAGwAAAf/+NgA2ADkAMAAzADMAOAAwAC4AbQBwADMAVFlFUgAAAAsAAAH//jIAMAAyADIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA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",
 
     // A ding sound for the alert. This file is played at the beginning of the
     // voice alert just to make it louder and fancier.
-    "Alert audio file": `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AAAICIAI+AAAAQAAAf4AAAAgB4AjwAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/0kxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//sQROOPMAAAf4AAAAgHQBjlAAAAAAAB/gAAACAQACQUAAAGqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv/RTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAAAD/AAAAEAAAH+AAAAIAeAJEAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETgh3AFAMcAAAAIAAAP8AAAAQBEASCgAAAgDIAkFAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQROAP8AAAf4AAAAgCoAjQAAABAAAB/gAAACAHgCPAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE34/wAAB/gAAACAHgCOAAAAEAAAH+AAAAIAeAI4AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETej/AAAH+AAAAIAeAI8AAAAQAAAf4AAAAgAAA/wAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQRN6P8AAAf4AAAAgB4AjwAAABAAAB/gAAACAAAD/AAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAHgCPAAAAEAAAH+AAAAIAAAP8AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGTdj/AAAH+AAAAIAAAP8AAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV`,
+    "Alert audio file":
+      "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AAAICIAI+AAAAQAAAf4AAAAgB4AjwAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/0kxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//sQROOPMAAAf4AAAAgHQBjlAAAAAAAB/gAAACAQACQUAAAGqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqv/RTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAAAD/AAAAEAAAH+AAAAIAeAJEAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETgh3AFAMcAAAAIAAAP8AAAAQBEASCgAAAgDIAkFAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQROAP8AAAf4AAAAgCoAjQAAABAAAB/gAAACAHgCPAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE34/wAAB/gAAACAHgCOAAAAEAAAH+AAAAIAeAI4AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EETej/AAAH+AAAAIAeAI8AAAAQAAAf4AAAAgAAA/wAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQRN6P8AAAf4AAAAgB4AjwAAABAAAB/gAAACAAAD/AAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBE3o/wAAB/gAAACAHgCPAAAAEAAAH+AAAAIAAAP8AAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGTdj/AAAH+AAAAIAAAP8AAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV",
   };
 }
 
-new CardWatcher();
+window.goatBotsCardWatcher = new CardWatcher();

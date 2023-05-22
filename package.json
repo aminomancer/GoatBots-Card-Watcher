@@ -1,0 +1,39 @@
+{
+  "name": "goatbots-card-watcher",
+  "version": "2.0.2",
+  "description": "Configure a list of cards to watch GoatBots until in stock. Pick a GoatBots page to watch, and click the cards you want to watch for. Then leave the script to automatically refresh that page on a set timer, check if any of the cards are in stock, and if so, add them to cart, play an audio alert, and (optionally) start delivery.",
+  "main": "goatbotsCardWatcher.user.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aminomancer/GoatBots-Card-Watcher.git"
+  },
+  "keywords": [
+    "userscript",
+    "goatbots",
+    "greasemonkey",
+    "mtg",
+    "magic",
+    "magicthegathering",
+    "mtgo",
+    "mtg-online"
+  ],
+  "author": "aminomancer",
+  "license": "CC-BY-NC-SA-4.0",
+  "bugs": {
+    "url": "https://github.com/aminomancer/GoatBots-Card-Watcher/issues"
+  },
+  "homepage": "https://github.com/aminomancer/GoatBots-Card-Watcher#readme",
+  "devDependencies": {
+    "@types/eslint-plugin-prettier": "^3.1.0",
+    "@types/prettier": "^2.7.1",
+    "eslint": "^8.7.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-prettier": "^4.2.1",
+    "prettier": "^2.5.1"
+  }
+}
