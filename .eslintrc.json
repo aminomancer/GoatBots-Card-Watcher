@@ -10,8 +10,10 @@
     "GM_getValue": "writable",
     "GM_setValue": "writable",
     "GM_addStyle": "writable",
+    "GM_getResourceURL": "writable",
     "GM_registerMenuCommand": "writable",
-    "GM_unregisterMenuCommand": "writable"
+    "GM_unregisterMenuCommand": "writable",
+    "GM_addValueChangeListener": "writable"
   },
   "rules": {
     "camelcase": [
