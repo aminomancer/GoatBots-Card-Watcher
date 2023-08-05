@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        2.2.0
+// @version        2.2.1
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -299,6 +299,12 @@ class CardWatcher {
       () => this.createMenu(!!page),
       { once: true }
     );
+    if (this.config["Use text-to-speech"] && window.speechSynthesis) {
+      this.voices = window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        this.voices = window.speechSynthesis.getVoices();
+      };
+    }
     // If we're on the delivery page...
     if (window.location.pathname === "/delivery") {
       // Check if we're here because we triggered delivery automatically...
@@ -364,11 +370,6 @@ class CardWatcher {
     // If the page's cards list is empty for some reason, do nothing.
     if (!this.cards?.length) return;
     document.addEventListener("DOMContentLoaded", this, { once: true });
-    if (this.config["Use text-to-speech"] && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        this.voices = window.speechSynthesis.getVoices();
-      };
-    }
     // Construct the predefined audio files.
     this.voiceAudio = new Audio(
       `data:audio/mp3;base64,${this.audio["Voice audio file"]}`
@@ -744,11 +745,19 @@ class CardWatcher {
       this.logger.debug("GoatBots Card Watcher: speech synth startup");
       const speech = new SpeechSynthesisUtterance();
       this.voices = window.speechSynthesis.getVoices();
+      speech.lang = "en-US";
       speech.text = text;
       speech.rate = this.config["Text-to-speech rate"];
+      speech.volume = this.config["Alert volume"];
       // If speech synthesis isn't working, use the generic voice file.
       if (this.voices) {
         if (!window.speechSynthesis.speaking) {
+          if (this.voices?.length > 0 && this.config["Text-to-speech voice"]) {
+            const voice = this.voices.find(
+              voice => voice?.voiceURI === this.config["Text-to-speech voice"]
+            );
+            if (voice) speech.voice = voice;
+          }
           // Trigger delivery when the alert is finished. I'd prefer to do this
           // sooner but navigation ends the speech synthesis.
           speech.onend = () => {
@@ -757,6 +766,7 @@ class CardWatcher {
             speech.onend = null;
           };
           this.logger.debug("GoatBots Card Watcher: speaking words :>> ", text);
+          this.alertAudio.volume = this.config["Alert volume"];
           this.alertAudio.play();
           window.speechSynthesis.speak(speech);
         } else {
@@ -774,8 +784,10 @@ class CardWatcher {
 
   /** Play a predefined audio alert. */
   playVoiceAlert() {
-    // Trigger delivery when the alert is finished.
+    this.alertAudio.volume = this.config["Alert volume"];
+    this.voiceAudio.volume = this.config["Alert volume"];
     this.voiceAudio.onended = () => {
+      // Trigger delivery when the alert is finished.
       this.finishedSpeaking = true;
       this.tryDelivery();
       this.voiceAudio.onended = null;
@@ -1343,7 +1355,7 @@ class CardWatcher {
         }
       }
       const main = document.getElementById("main");
-      main?.classList.add("click-select");
+      main?.classList.remove("click-select");
       main?.removeEventListener("click", clickSelect, true);
       document.body?.removeEventListener("keydown", clickSelectEscape);
       clickSelectForm.style.display = "none";
@@ -1363,8 +1375,12 @@ class CardWatcher {
     menu?.firstElementChild?.classList.add("active");
     // Make sure the end of the path is selected so we can easily add the +
     // character to the end of the path.
-    pathField.focus();
-    pathField.scrollTo({ left: pathField.scrollWidth });
+    if (cards) {
+      cardsField.focus();
+    } else {
+      pathField.focus();
+      pathField.scrollTo({ left: pathField.scrollWidth });
+    }
   }
 
   // Open the advanced settings dialog.
@@ -1403,6 +1419,7 @@ class CardWatcher {
     const refreshIntervalField = document.createElement("input");
     refreshIntervalField.type = "number";
     refreshIntervalField.required = true;
+    refreshIntervalField.size = 1;
     refreshIntervalField.step = 1000;
     refreshIntervalField.min = 1000;
     refreshIntervalField.max = Number.MAX_SAFE_INTEGER;
@@ -1457,6 +1474,57 @@ class CardWatcher {
     cardLimitField.value = this.config["Limit number of card names to speak"];
     cardLimitLabel.appendChild(cardLimitField);
 
+    const alertVolumeLabel = form.appendChild(document.createElement("label"));
+    alertVolumeLabel.id = "card-watcher-alert-volume";
+    alertVolumeLabel.setAttribute("for", "");
+    const alertVolumeTitle = alertVolumeLabel.appendChild(
+      document.createElement("span")
+    );
+    alertVolumeTitle.textContent = "Alert volume:";
+    alertVolumeTitle.style.cursor = "help";
+    alertVolumeTitle.title =
+      "How loud should the alert be? This is a number between 0 and 1, where 0 is silent and 1 is the loudest. The default is 1.";
+    alertVolumeTitle.className = "no-wrap";
+    // use a range input and a number input so the user can type in a value if
+    // they want, but also use the slider if they prefer.
+    const alertVolumeGroup = document.createElement("div");
+    alertVolumeGroup.id = "card-watcher-alert-volume-group";
+    alertVolumeGroup.className = "inline-input-group no-wrap";
+    const alertVolumeRangeLabel = alertVolumeGroup.appendChild(
+      document.createElement("label")
+    );
+    const alertVolumeRange = document.createElement("input");
+    alertVolumeRange.id = "card-watcher-alert-volume-range";
+    alertVolumeRange.type = "range";
+    alertVolumeRange.required = true;
+    alertVolumeRange.min = 0.01;
+    alertVolumeRange.max = 1;
+    alertVolumeRange.step = 0.01;
+    alertVolumeRange.value = this.config["Alert volume"];
+    alertVolumeRangeLabel.appendChild(alertVolumeRange);
+    const alertVolumeNumberLabel = alertVolumeGroup.appendChild(
+      document.createElement("label")
+    );
+    const alertVolumeNumber = document.createElement("input");
+    alertVolumeNumber.id = "card-watcher-alert-volume-number";
+    alertVolumeNumber.type = "number";
+    alertVolumeNumber.required = true;
+    alertVolumeNumber.size = 4;
+    alertVolumeNumber.min = 0.01;
+    alertVolumeNumber.max = 1;
+    alertVolumeNumber.step = 0.01;
+    alertVolumeNumber.value = this.config["Alert volume"];
+    alertVolumeNumberLabel.appendChild(alertVolumeNumber);
+    // make sure the range and number inputs stay in sync
+    alertVolumeRange.oninput = () => {
+      // round to 2 decimal places
+      alertVolumeNumber.value = Math.round(alertVolumeRange.value * 100) / 100;
+    };
+    alertVolumeNumber.oninput = () => {
+      alertVolumeRange.value = alertVolumeNumber.value;
+    };
+    alertVolumeLabel.appendChild(alertVolumeGroup);
+
     const speechRateLabel = form.appendChild(document.createElement("label"));
     speechRateLabel.id = "card-watcher-speech-rate";
     const speechRateTitle = speechRateLabel.appendChild(
@@ -1469,12 +1537,47 @@ class CardWatcher {
     const speechRateField = document.createElement("input");
     speechRateField.type = "number";
     speechRateField.required = true;
+    speechRateField.size = 1;
     speechRateField.step = "any";
     speechRateField.min = 0.1;
     speechRateField.max = 10;
     speechRateField.placeholder = 1;
     speechRateField.value = this.config["Text-to-speech rate"];
     speechRateLabel.appendChild(speechRateField);
+
+    // Text-to-speech voice
+    const speechVoiceLabel = form.appendChild(document.createElement("label"));
+    speechVoiceLabel.id = "card-watcher-speech-voice";
+    const speechVoiceTitle = speechVoiceLabel.appendChild(
+      document.createElement("span")
+    );
+    speechVoiceTitle.textContent = "Text-to-speech voice:";
+    speechVoiceTitle.style.cursor = "help";
+    speechVoiceTitle.title =
+      "Which voice to use for text-to-speech? This is a platform-dependent setting.";
+    const speechVoiceField = document.createElement("select");
+    const defaultSpeechVoiceOption = document.createElement("option");
+    defaultSpeechVoiceOption.value = "";
+    defaultSpeechVoiceOption.textContent = "System default";
+    speechVoiceField.appendChild(defaultSpeechVoiceOption);
+    const voices = this.voices || [];
+    if (voices.length < 1) {
+      speechVoiceField.disabled = true;
+      speechVoiceField.style.cursor = "help";
+      speechVoiceField.title =
+        "No voices available. This could be because you are using a browser or OS that does not support the Web Speech API or because the API is disabled in your browser settings.";
+      defaultSpeechVoiceOption.disabled = true;
+      speechVoiceField.value = "";
+    } else {
+      for (const voice of voices) {
+        const option = document.createElement("option");
+        option.value = voice.voiceURI;
+        option.textContent = voice.name;
+        speechVoiceField.appendChild(option);
+      }
+      speechVoiceField.value = this.config["Text-to-speech voice"] || "";
+    }
+    speechVoiceLabel.appendChild(speechVoiceField);
 
     // Editor format (YAML or JSON)
     const currentFormat = this.config["Editor format"];
@@ -1490,7 +1593,7 @@ class CardWatcher {
       "The format to use when editing the card list. YAML is the default, but you can use JSON instead if you prefer.";
     const editorFormatGroup = document.createElement("div");
     editorFormatGroup.id = "card-watcher-editor-format-group";
-    editorFormatGroup.className = "radio-group";
+    editorFormatGroup.className = "inline-input-group";
     const editorFormatYAMLLabel = editorFormatGroup.appendChild(
       document.createElement("label")
     );
@@ -1572,10 +1675,12 @@ class CardWatcher {
             "Limit number of card names to speak",
             Number(cardLimitField.value.trim())
           );
+          GM_setValue("Alert volume", Number(alertVolumeNumber.value.trim()));
           GM_setValue(
             "Text-to-speech rate",
             Number(speechRateField.value.trim())
           );
+          GM_setValue("Text-to-speech voice", speechVoiceField.value);
           GM_setValue("Editor format", form.elements["editor-format"].value);
           GM_setValue("Debug log level", logLevelField.value);
           break;
@@ -1932,6 +2037,11 @@ class CardWatcher {
     /** @type {number} */
     "Limit number of card names to speak": 0,
 
+    /* How loud should the alert be? This is a number between 0 and 1, where 0
+     * is silent and 1 is the loudest. The default is 1. */
+    /** @type {number} */
+    "Alert volume": 1,
+
     /* How fast should the text-to-speech voice be? The value can range between
      * 0.1 (lowest) and 10 (highest), with 1 being the default pitch for the
      * current platform or voice, which should correspond to a normal speaking
@@ -1942,6 +2052,13 @@ class CardWatcher {
      * So, a slower voice rate might cause a delay in starting delivery. */
     /** @type {number} */
     "Text-to-speech rate": 1.1,
+
+    /* Which text-to-speech voice to use. This is a URI reference to a voice on
+     * your system. You can configure this setting in the Advanced Settings
+     * dialog, and you can test the voices in your operating system's settings.
+     * If you leave this blank, it will use your system's default voice. */
+    /** @type {string|null} */
+    "Text-to-speech voice": "",
 
     /* Which format the card list should be rendered with in the editor. Cards
      * are stored in GreaseMonkey's storage as JSON, and converted to JavaScript
@@ -2018,6 +2135,9 @@ class CardWatcher {
   user-select: none;
   white-space: nowrap;
 }
+.card-watcher-dialog label > span:not(.no-wrap) {
+  white-space: normal;
+}
 .card-watcher-dialog h3 {
   margin-block: 0 0.4em;
   text-align: center;
@@ -2025,11 +2145,7 @@ class CardWatcher {
 .card-watcher-dialog p {
   margin-block: 0;
 }
-.card-watcher-dialog span {
-  margin-inline-end: 0.4em;
-}
 .card-watcher-dialog input:is([type="text"], [type="number"]) {
-  width: 100%;
   padding: 0.5em;
   flex-grow: 1;
 }
@@ -2054,7 +2170,7 @@ class CardWatcher {
   width: 100%;
   display: flex;
   align-items: center;
-  column-gap: 0.6em;
+  column-gap: 1em;
   flex-flow: row nowrap;
 }
 .card-watcher-dialog #card-watcher-cards-list {
@@ -2083,8 +2199,16 @@ class CardWatcher {
   border-color: transparent;
 }
 .card-watcher-dialog select {
+  padding-inline-end: 1.5em;
+  min-width: 0;
   background-position-x: calc(100% - 0.6em);
+  flex-grow: 1;
+  flex-shrink: 1;
+  text-overflow: ellipsis;
   cursor: default;
+}
+.card-watcher-dialog select:disabled {
+  opacity: 0.4;
 }
 .card-watcher-dialog .button-box {
   display: flex;
@@ -2105,23 +2229,31 @@ class CardWatcher {
   pointer-events: none;
   opacity: 0.4;
 }
-.card-watcher-dialog .radio-group {
+.card-watcher-dialog .inline-input-group {
   display: flex;
   align-items: center;
+  justify-content: space-evenly;
   flex-flow: row wrap;
   flex-grow: 1;
   gap: 0.6em;
 }
-.card-watcher-dialog .radio-group > label {
-  flex-grow: 1;
+.card-watcher-dialog .inline-input-group.no-wrap {
+  flex-wrap: nowrap;
+}
+.card-watcher-dialog .inline-input-group > label {
   width: unset;
 }
-.card-watcher-dialog #card-watcher-card-limit > span {
-  white-space: normal;
+.card-watcher-dialog .inline-input-group > label > input[type="range"] {
+  width: 100%;
+  flex-grow: 1;
+  flex-shrink: 1;
 }
 .card-watcher-dialog #card-watcher-card-limit > input {
   width: auto;
   min-width: 50px;
+}
+.card-watcher-dialog #card-watcher-speech-voice > select {
+  width: 100%;
 }
 .card-watcher-dialog input[type="number"] {
   -moz-appearance: textfield;
@@ -2161,4 +2293,14 @@ class CardWatcher {
   };
 }
 
-window.goatBotsCardWatcher = new CardWatcher();
+const cardWatcher = new CardWatcher();
+
+try {
+  unsafeWindow.goatBotsCardWatcher = cardWatcher;
+} catch (error) {
+  try {
+    window.goatBotsCardWatcher = cardWatcher;
+  } catch (error) {
+    console.error("Could not attach card watcher to window");
+  }
+}
