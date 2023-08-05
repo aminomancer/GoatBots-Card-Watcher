@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           GoatBots Card Watcher
-// @version        2.2.1
+// @version        2.2.2
 // @author         aminomancer
 // @homepageURL    https://github.com/aminomancer/GoatBots-Card-Watcher
 // @supportURL     https://github.com/aminomancer/GoatBots-Card-Watcher
@@ -2149,6 +2149,9 @@ class CardWatcher {
   padding: 0.5em;
   flex-grow: 1;
 }
+.card-watcher-dialog input:is([type="range"], [type="checkbox"], [type="radio"]) {
+  cursor: default;
+}
 .card-watcher-dialog textarea {
   min-width: 100%;
   min-height: 70px;
@@ -2189,7 +2192,6 @@ class CardWatcher {
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
-  cursor: default;
 }
 .card-watcher-dialog input[type="checkbox"]:checked {
   background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>');
@@ -2228,6 +2230,19 @@ class CardWatcher {
 .card-watcher-dialog .button-box > [disabled] {
   pointer-events: none;
   opacity: 0.4;
+}
+.card-watcher-dialog input[type="range"]:is(:hover, :focus) {
+	border: 1px solid #df652a;
+	box-shadow: 0 0 10px 2px #df652a88;
+}
+.card-watcher-dialog input[type=range]::-moz-range-thumb {
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  transition: border .2s ease-out,box-shadow .2s ease-out;
+}
+.card-watcher-dialog input[type=range]::-moz-range-thumb:is(:hover, :active, :focus) {
+  border-color: #df652a;
+  box-shadow:0 0 10px 2px #df652a;
 }
 .card-watcher-dialog .inline-input-group {
   display: flex;
